@@ -3,19 +3,23 @@
   inset: 0;
   background: rgba(15, 23, 42, 0.6);
   display: grid;
-  place-items: center;
+  place-items: start center;
   padding: 24px;
+  overflow-y: auto;
   z-index: 50;
 }
 
 .modal {
   width: min(900px, 96vw);
+  max-height: calc(100vh - 48px);
   background: white;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 14px 18px 16px;
+  overflow: hidden;
 }
 
 .modal-header {
@@ -27,12 +31,27 @@
 .modal-body {
   display: grid;
   gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.form-alert {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 0.86rem;
 }
 
 .modal-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.modal-row-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .modal-body label {
@@ -71,7 +90,9 @@
 
 .photo-preview {
   display: grid;
-  gap: 8px;
+  justify-items: center;
+  gap: 10px;
+  justify-content: center;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -85,6 +106,76 @@
   object-fit: cover;
   border-radius: 10px;
   border: 1px solid var(--border);
+}
+
+.photo-frame-shell {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+}
+
+.photo-frame-preview {
+  position: relative;
+  width: 170px;
+  height: 170px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #0f172a;
+  background: #0f172a;
+}
+
+.photo-frame-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+}
+
+.photo-edit-overlay {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #f8fafc;
+  padding: 0;
+}
+
+.photo-editor-popover {
+  width: min(430px, 100%);
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  padding: 10px;
+}
+
+.photo-editor-popover label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.photo-editor-popover input[type="range"] {
+  padding: 0;
+}
+
+.photo-upload-inline {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px !important;
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  cursor: pointer;
 }
 
 .modal-footer {
@@ -106,6 +197,16 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: #f8fafc;
+}
+
+.confirm-modal {
+  width: min(460px, 94vw);
+  max-height: none;
+  grid-template-rows: auto auto auto;
+}
+
+.confirm-modal-footer {
+  justify-content: flex-end;
 }
 
 .section-header h4 {

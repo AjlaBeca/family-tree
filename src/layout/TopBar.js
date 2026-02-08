@@ -17,17 +17,11 @@ const tabs = [
   { id: "search", label: "Pretraga", icon: Search },
 ];
 
-const TopBar = ({ onAddPerson, onImport, onExport, activeTab, onTabChange }) => (
+const TopBar = ({ onAddPerson, onImport, onExport, activeTab, onTabChange, onBrandClick }) => (
   <header className="topbar">
-    <div className="brand">
-      <div className="brand-icon">
-        <Users className="w-6 h-6" />
-      </div>
-      <div>
-        <p className="brand-title">Porodični atlas</p>
-        <p className="brand-subtitle">Vizualizuj, istraži i sačuvaj svoje porijeklo</p>
-      </div>
-    </div>
+    <button type="button" className="brand brand-btn" onClick={onBrandClick} title="Pocetna">
+      <Users className="brand-icon" />
+      <p className="brand-title">Porodični atlas</p>    </button>
 
     <nav className="topbar-nav">
       {tabs.map((tab) => (
@@ -64,3 +58,6 @@ const TopBar = ({ onAddPerson, onImport, onExport, activeTab, onTabChange }) => 
 );
 
 export default TopBar;
+
+
+

@@ -84,8 +84,105 @@ const init = async () => {
     )`
   );
 
+  await run(
+    `CREATE TABLE IF NOT EXISTS relationships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id INTEGER NOT NULL,
+      person1_id INTEGER NOT NULL,
+      person2_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'partner',
+      start_date TEXT DEFAULT '',
+      end_date TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      is_current INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (family_id) REFERENCES families(id)
+    )`
+  );
+
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_relationships_family ON relationships(family_id)"
+  );
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_relationships_person1 ON relationships(person1_id)"
+  );
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_relationships_person2 ON relationships(person2_id)"
+  );
+
+  await run(
+    `CREATE TABLE IF NOT EXISTS family_health (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id INTEGER NOT NULL UNIQUE,
+      hereditary_conditions TEXT DEFAULT '',
+      risk_factors TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (family_id) REFERENCES families(id)
+    )`
+  );
+
+  await run(
+    `CREATE TABLE IF NOT EXISTS person_health (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id INTEGER NOT NULL,
+      person_id INTEGER NOT NULL UNIQUE,
+      hereditary_conditions TEXT DEFAULT '',
+      risk_factors TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (family_id) REFERENCES families(id)
+    )`
+  );
+
+  await run(
+    `CREATE TABLE IF NOT EXISTS gallery_photos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id INTEGER NOT NULL,
+      src TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (family_id) REFERENCES families(id)
+    )`
+  );
+
+  await run(
+    `CREATE TABLE IF NOT EXISTS gallery_photo_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      photo_id INTEGER NOT NULL,
+      person_id INTEGER NOT NULL,
+      x REAL NOT NULL DEFAULT 50,
+      y REAL NOT NULL DEFAULT 50,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (photo_id) REFERENCES gallery_photos(id)
+    )`
+  );
+
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_gallery_photos_family ON gallery_photos(family_id)"
+  );
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_gallery_photo_tags_photo ON gallery_photo_tags(photo_id)"
+  );
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_gallery_photo_tags_person ON gallery_photo_tags(person_id)"
+  );
+
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_person_health_family ON person_health(family_id)"
+  );
+  await run(
+    "CREATE INDEX IF NOT EXISTS idx_person_health_person ON person_health(person_id)"
+  );
+
   if (!(await columnExists("people", "divorced"))) {
     await run("ALTER TABLE people ADD COLUMN divorced INTEGER DEFAULT 0");
+  }
+  if (!(await columnExists("people", "is_pinned"))) {
+    await run("ALTER TABLE people ADD COLUMN is_pinned INTEGER DEFAULT 0");
+  }
+  if (!(await columnExists("people", "pin_color"))) {
+    await run("ALTER TABLE people ADD COLUMN pin_color TEXT DEFAULT '#f59e0b'");
   }
 
   const familyCount = await get("SELECT COUNT(*) as count FROM families");

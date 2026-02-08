@@ -32,7 +32,8 @@ const getSurname = (name = "") => {
   return parts.length > 1 ? parts[parts.length - 1] : "";
 };
 
-export const buildModelData = (people) => {
+export const buildModelData = (people, options = {}) => {
+  const { cardMode = "detailed", resolvePhoto } = options;
   const nodeDataArray = [];
   const linkDataArray = [];
   const marriages = new Map();
@@ -64,7 +65,12 @@ export const buildModelData = (people) => {
   };
 
   people.forEach((person) => {
+    const rawPhoto = String(person.photo || "").trim();
+    const photoSrc = typeof resolvePhoto === "function" ? resolvePhoto(rawPhoto) : rawPhoto;
     const data = { ...person };
+    data.cardMode = cardMode;
+    data.photoSrc = String(photoSrc || "").trim();
+    data.hasPhoto = Boolean(data.photoSrc);
     nodeDataArray.push(data);
   });
 

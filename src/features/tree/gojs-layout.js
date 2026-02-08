@@ -5,8 +5,6 @@ import {
   TREE_CLUSTER_GAP,
   TREE_GROUP_GAP,
   TREE_LAYER_GAP,
-  TREE_SPOUSE_CURVINESS,
-  TREE_SPOUSE_CURVE_DIR,
 } from "./tree-constants";
 
 const getParents = (person, keys) => {

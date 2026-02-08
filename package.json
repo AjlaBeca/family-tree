@@ -2,6 +2,9 @@
   "name": "my-family-tree",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <23"
+  },
   "proxy": "http://localhost:5000",
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
@@ -15,11 +18,11 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "set \"NODE_OPTIONS=--no-deprecation\" && react-scripts start",
     "server": "node backend/server.js",
-    "dev": "concurrently \"npm run server\" \"npm start\"",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
+    "dev": "set \"NODE_OPTIONS=--no-deprecation\" && concurrently \"npm run server\" \"npm run start\"",
+    "build": "set \"NODE_OPTIONS=--no-deprecation\" && react-scripts build",
+    "test": "set \"NODE_OPTIONS=--no-deprecation\" && react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
