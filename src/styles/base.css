@@ -1,0 +1,34 @@
+:root {
+  --ink-900: #0f172a;
+  --ink-700: #334155;
+  --ink-500: #64748b;
+  --surface: #f8fafc;
+  --surface-2: #eef2f6;
+  --accent: #4338ca;
+  --accent-2: #8b5cf6;
+  --accent-soft: rgba(67, 56, 202, 0.08);
+  --border: rgba(148, 163, 184, 0.4);
+  --shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #eef2ff 0%, #f8fafc 45%, #f1f5f9 100%);
+  color: var(--ink-900);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+h2,
+h3,
+h4,
+.brand-title {
+  font-family: "Fraunces", "Georgia", serif;
+  letter-spacing: -0.01em;
+}
