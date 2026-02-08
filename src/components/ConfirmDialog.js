@@ -5,7 +5,7 @@ const ConfirmDialog = ({
   title,
   message,
   confirmLabel = "Potvrdi",
-  cancelLabel = "Otka\u017ei",
+  cancelLabel = "Otkaži",
   onConfirm,
   onCancel,
   isDanger = true,

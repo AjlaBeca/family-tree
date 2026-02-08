@@ -572,7 +572,7 @@ const GalleryView = ({
             <h3>Osobe</h3>
             <input
               type="text"
-              placeholder="Pretra\u017ei osobu"
+              placeholder="Pretraži osobu"
               value={peopleSearch}
               onChange={(e) => setPeopleSearch(e.target.value)}
             />
@@ -684,7 +684,7 @@ const GalleryView = ({
               <>
                 <input
                   type="text"
-                  placeholder="Pretrazi osobu za tag"
+                  placeholder="Pretraži osobu za tag"
                   value={tagSearch}
                   onChange={(e) => setTagSearch(e.target.value)}
                 />
@@ -702,7 +702,7 @@ const GalleryView = ({
                   {taggablePeople.length === 0 && <p className="muted-text">Nema rezultata.</p>}
                 </div>
                 <button type="button" className="btn-ghost small" onClick={() => setPendingPoint(null)}>
-                  Otka\u017ei tag
+                  Otkaži tag
                 </button>
               </>
             )}

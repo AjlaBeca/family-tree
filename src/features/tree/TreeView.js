@@ -802,7 +802,7 @@ const TreeView = ({
         </div>
 
         <div className="panel card">
-          <h3>{"Sa\u017eetak porodice"}</h3>
+          <h3>{"Sažetak porodice"}</h3>
           <div className="stat-grid">
             <div>
               <p className="stat-label">Ukupno</p>
@@ -873,7 +873,7 @@ const TreeView = ({
                   onClick={() => onExpandModeChange(mode)}
                 >
                   {mode === "ancestors"
-                    ? "Predci"
+                    ? "Preci"
                     : mode === "descendants"
                       ? "Potomci"
                       : mode === "both"
