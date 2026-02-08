@@ -1,16 +1,26 @@
-﻿import React from "react";
-import { Save, Trash2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Save, Trash2, Plus } from "lucide-react";
 
 const PersonModal = ({
   isOpen,
   person,
   people,
+  tags,
+  selectedTagIds,
+  onCreateTag,
   editMode,
   onClose,
   onSave,
   onDelete,
   onChange,
 }) => {
+  const [tagSelections, setTagSelections] = useState([]);
+  const [tagDraft, setTagDraft] = useState("");
+
+  useEffect(() => {
+    setTagSelections(selectedTagIds || []);
+  }, [selectedTagIds]);
+
   if (!isOpen || !person) return null;
 
   const update = (changes) => {
@@ -198,6 +208,59 @@ const PersonModal = ({
             </label>
           </div>
 
+          <div className="modal-section">
+            <div className="section-header">
+              <h4>Oznake</h4>
+            </div>
+            <div className="tag-input">
+              <input
+                type="text"
+                placeholder="Nova oznaka"
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-ghost small"
+                onClick={async () => {
+                  const name = tagDraft.trim();
+                  if (!name || !onCreateTag) return;
+                  const tag = await onCreateTag(name);
+                  if (tag?.id) {
+                    setTagSelections((prev) =>
+                      prev.includes(tag.id) ? prev : [...prev, tag.id]
+                    );
+                  }
+                  setTagDraft("");
+                }}
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj
+              </button>
+            </div>
+            <div className="tag-list">
+              {(tags || []).length === 0 && (
+                <p className="muted-text">Nema oznaka.</p>
+              )}
+              {(tags || []).map((tag) => (
+                <label key={tag.id} className="tag-item">
+                  <input
+                    type="checkbox"
+                    checked={tagSelections.includes(tag.id)}
+                    onChange={() =>
+                      setTagSelections((prev) =>
+                        prev.includes(tag.id)
+                          ? prev.filter((id) => id !== tag.id)
+                          : [...prev, tag.id]
+                      )
+                    }
+                  />
+                  <span>{tag.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="modal-row">
             <label>
               URL fotografije (opciono)
@@ -245,7 +308,10 @@ const PersonModal = ({
             <button onClick={onClose} className="btn-ghost">
               Odustani
             </button>
-            <button onClick={onSave} className="btn-primary">
+            <button
+              onClick={() => onSave({ person, tagIds: tagSelections })}
+              className="btn-primary"
+            >
               <Save className="w-4 h-4" />
               Sačuvaj
             </button>

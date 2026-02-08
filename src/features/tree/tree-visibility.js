@@ -1,4 +1,4 @@
-﻿export const getVisiblePeople = (people, focusPersonId, expandMode, maxDepth) => {
+export const getVisiblePeople = (people, focusPersonId, expandMode, maxDepth) => {
   if (people.length === 0) return people;
   if (expandMode === "all") return people;
   if (!focusPersonId) return people;
@@ -48,15 +48,6 @@
   }
   if (expandMode === "descendants" || expandMode === "both") {
     walkDescendants(focusPersonId, 0);
-  }
-
-  const focus = byId.get(focusPersonId);
-  if (focus) {
-    const parents = [focus.parent, focus.parent2].filter(Boolean);
-    parents.forEach((parentId) => {
-      const siblings = childrenByParent.get(parentId) || [];
-      siblings.forEach((siblingId) => included.add(siblingId));
-    });
   }
 
   Array.from(included).forEach((id) => {

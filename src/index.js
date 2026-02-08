@@ -1,3 +1,3 @@
-﻿import "./app/index";
+import "./app/index";
 
 

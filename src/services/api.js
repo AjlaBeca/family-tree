@@ -1,4 +1,4 @@
-﻿export const api = async (path, options = {}) => {
+export const api = async (path, options = {}) => {
   const res = await fetch(path, options);
   if (!res.ok) {
     const message = await res.text();

@@ -1,4 +1,4 @@
-﻿export const TREE_NODE_WIDTH = 190;
+export const TREE_NODE_WIDTH = 190;
 export const TREE_NODE_HEIGHT = 72;
 export const TREE_SPOUSE_GAP = 60;
 export const TREE_SPOUSE_CURVINESS = Math.max(48, Math.round(TREE_SPOUSE_GAP * 0.8));

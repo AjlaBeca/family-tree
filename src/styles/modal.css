@@ -1,4 +1,4 @@
-﻿.modal-backdrop {
+.modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.6);
@@ -97,6 +97,43 @@
 .modal-actions {
   display: flex;
   gap: 10px;
+}
+
+.modal-section {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #f8fafc;
+}
+
+.section-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.tag-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-input input {
+  flex: 1;
+}
+
+.tag-list {
+  display: grid;
+  gap: 6px;
+}
+
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--ink-700);
 }
 
 

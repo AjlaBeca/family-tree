@@ -1,4 +1,4 @@
-﻿# Pokretanje projekta
+# Pokretanje projekta
 
 Ovo je mali projekat za vođenje porodičnog stabla (frontend + backend).
 

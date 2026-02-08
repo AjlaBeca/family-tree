@@ -1,4 +1,4 @@
-﻿import {
+import {
   TREE_NODE_WIDTH,
   TREE_NODE_HEIGHT,
   TREE_SPOUSE_GAP,

@@ -62,6 +62,28 @@ const init = async () => {
     )`
   );
 
+  await run(
+    `CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (family_id) REFERENCES families(id)
+    )`
+  );
+
+  await run(
+    `CREATE TABLE IF NOT EXISTS people_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id INTEGER NOT NULL,
+      person_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(person_id, tag_id),
+      FOREIGN KEY (family_id) REFERENCES families(id)
+    )`
+  );
+
   if (!(await columnExists("people", "divorced"))) {
     await run("ALTER TABLE people ADD COLUMN divorced INTEGER DEFAULT 0");
   }

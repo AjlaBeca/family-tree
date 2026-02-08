@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Home, BarChart3, ImageIcon, Search } from "lucide-react";
 
 const tabs = [

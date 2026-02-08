@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   Plus,
   Upload,
@@ -40,6 +40,9 @@ const TreeView = ({
   onAddPerson,
   onImport,
   onExport,
+  tags,
+  activeTagId,
+  onTagChange,
   onEditPerson,
 }) => {
   const diagramRef = useRef(null);
@@ -276,7 +279,7 @@ const TreeView = ({
         fromSpot: window.go.Spot.Bottom,
         toSpot: window.go.Spot.Top,
       },
-      $(window.go.Shape, { strokeWidth: 2, stroke: "#94A3B8" })
+      $(window.go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
     );
 
     diagram.linkTemplateMap.add(
@@ -290,15 +293,15 @@ const TreeView = ({
           curve: window.go.Link.Bezier,
           curviness: TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
           computeCurviness: () => TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
-          fromSpot: window.go.Spot.Right,
-          toSpot: window.go.Spot.Left,
-          fromEndSegmentLength: 0,
-          toEndSegmentLength: 0,
+          fromSpot: window.go.Spot.RightSide,
+          toSpot: window.go.Spot.LeftSide,
+          fromEndSegmentLength: 10,
+          toEndSegmentLength: 10,
           layerName: "Background",
         },
         $(
           window.go.Shape,
-          { strokeWidth: 2, stroke: "#A855F7" },
+          { strokeWidth: 2.6, stroke: "#7C3AED" },
           new window.go.Binding("strokeDashArray", "isDivorced", (value) =>
             value ? [8, 6] : null
           )
@@ -318,7 +321,7 @@ const TreeView = ({
           fromSpot: window.go.Spot.Bottom,
           toSpot: window.go.Spot.Top,
         },
-        $(window.go.Shape, { strokeWidth: 2, stroke: "#94A3B8" })
+        $(window.go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
       )
     );
 
@@ -409,7 +412,7 @@ const TreeView = ({
         </div>
 
         <div className="panel card">
-          <h3>Porodicne grupe</h3>
+          <h3>Porodične grupe</h3>
           <div className="family-select">
             <Layers className="w-4 h-4" />
             <select
@@ -510,6 +513,17 @@ const TreeView = ({
             <strong>{focusPerson?.name || "Nema"}</strong>
           </div>
           <div className="filter-item">
+            <span>Oznaka</span>
+            <select value={activeTagId || 0} onChange={(e) => onTagChange(Number(e.target.value))}>
+              <option value={0}>Sve oznake</option>
+              {(tags || []).map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-item">
             <span>Prikaz</span>
             <div className="segmented">
               {["ancestors", "descendants", "both", "all"].map((mode) => (
@@ -534,11 +548,11 @@ const TreeView = ({
             <input
               type="range"
               min="1"
-              max="6"
-              value={maxDepth}
-              onChange={(e) => onMaxDepthChange(Number(e.target.value))}
+              max="1"
+              value={1}
+              disabled
             />
-            <strong>{maxDepth}</strong>
+            <strong>1</strong>
           </div>
         </div>
 
@@ -553,7 +567,7 @@ const TreeView = ({
         {people.length === 0 && (
           <div className="empty-state">
             <h3>Još nema osoba</h3>
-            <p>Dodaj prvog clana porodice da pocneš graditi ovo stablo.</p>
+            <p>Dodaj prvog člana porodice da počneš graditi ovo stablo.</p>
             <button onClick={onAddPerson} className="btn-primary">
               <Plus className="w-4 h-4" />
               Dodaj osobu

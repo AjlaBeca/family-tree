@@ -59,6 +59,8 @@ app.post("/api/families", async (req, res) => {
 app.delete("/api/families/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    await run("DELETE FROM people_tags WHERE family_id = ?", [id]);
+    await run("DELETE FROM tags WHERE family_id = ?", [id]);
     await run("DELETE FROM people WHERE family_id = ?", [id]);
     await run("DELETE FROM families WHERE id = ?", [id]);
     res.json({ ok: true });
@@ -193,8 +195,106 @@ app.delete("/api/people/:id", async (req, res) => {
       [id, id, id]
     );
 
+    await run("DELETE FROM people_tags WHERE person_id = ?", [id]);
     await run("DELETE FROM people WHERE id = ?", [id]);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/tags", async (req, res) => {
+  try {
+    const { familyId } = req.query;
+    const params = [];
+    let sql = "SELECT id, family_id as familyId, name, created_at as createdAt FROM tags";
+    if (familyId) {
+      sql += " WHERE family_id = ?";
+      params.push(familyId);
+    }
+    sql += " ORDER BY name COLLATE NOCASE ASC";
+    const tags = await all(sql, params);
+    res.json(tags);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/tags", async (req, res) => {
+  try {
+    const { familyId, name } = req.body;
+    if (!familyId || !name) {
+      return res.status(400).json({ error: "familyId and name are required" });
+    }
+    const existing = await get(
+      "SELECT id, family_id as familyId, name FROM tags WHERE family_id = ? AND name = ?",
+      [familyId, name.trim()]
+    );
+    if (existing) return res.status(200).json(existing);
+
+    const result = await run("INSERT INTO tags (family_id, name) VALUES (?, ?)", [
+      familyId,
+      name.trim(),
+    ]);
+    const tag = await get(
+      "SELECT id, family_id as familyId, name, created_at as createdAt FROM tags WHERE id = ?",
+      [result.lastID]
+    );
+    res.status(201).json(tag);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/tags/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await run("DELETE FROM people_tags WHERE tag_id = ?", [id]);
+    await run("DELETE FROM tags WHERE id = ?", [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/tag-links", async (req, res) => {
+  try {
+    const { familyId } = req.query;
+    const params = [];
+    let sql = "SELECT person_id as personId, tag_id as tagId FROM people_tags";
+    if (familyId) {
+      sql += " WHERE family_id = ?";
+      params.push(familyId);
+    }
+    const links = await all(sql, params);
+    res.json(links);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/people/:id/tags", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { familyId, tagIds } = req.body;
+    if (!familyId || !Array.isArray(tagIds)) {
+      return res.status(400).json({ error: "familyId and tagIds are required" });
+    }
+
+    await run("DELETE FROM people_tags WHERE person_id = ?", [id]);
+    for (const tagId of tagIds) {
+      if (!tagId) continue;
+      await run(
+        "INSERT OR IGNORE INTO people_tags (family_id, person_id, tag_id) VALUES (?, ?, ?)",
+        [familyId, id, tagId]
+      );
+    }
+
+    const links = await all(
+      "SELECT person_id as personId, tag_id as tagId FROM people_tags WHERE person_id = ?",
+      [id]
+    );
+    res.json(links);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
