@@ -1,4 +1,4 @@
-export const getVisiblePeople = (people, focusPersonId, expandMode, maxDepth) => {
+﻿export const getVisiblePeople = (people, focusPersonId, expandMode, maxDepth) => {
   if (people.length === 0) return people;
   if (expandMode === "all") return people;
   if (!focusPersonId) return people;
@@ -66,3 +66,5 @@ export const getVisiblePeople = (people, focusPersonId, expandMode, maxDepth) =>
 
   return people.filter((p) => included.has(p.id));
 };
+
+

@@ -12,6 +12,8 @@
   --radius-lg: 20px;
   --radius-md: 14px;
   --radius-sm: 10px;
+  --topbar-height: 64px;
+  --header-stack: var(--topbar-height);
 }
 
 * {

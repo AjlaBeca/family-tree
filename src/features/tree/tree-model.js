@@ -1,4 +1,4 @@
-export const sanitizePeople = (people) => {
+﻿export const sanitizePeople = (people) => {
   const keys = new Set(people.map((p) => p.key));
   const sanitized = people.map((p) => ({
     ...p,
@@ -175,3 +175,5 @@ export const buildModelData = (people) => {
 
   return { nodeDataArray, linkDataArray };
 };
+
+

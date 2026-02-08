@@ -1,7 +1,23 @@
 import React from "react";
-import { Users, Plus, Upload, Download } from "lucide-react";
+import {
+  Users,
+  Plus,
+  Upload,
+  Download,
+  Home,
+  BarChart3,
+  ImageIcon,
+  Search,
+} from "lucide-react";
 
-const TopBar = ({ onAddPerson, onImport, onExport }) => (
+const tabs = [
+  { id: "tree", label: "Stablo", icon: Home },
+  { id: "stats", label: "Statistika", icon: BarChart3 },
+  { id: "gallery", label: "Galerija", icon: ImageIcon },
+  { id: "search", label: "Pretraga", icon: Search },
+];
+
+const TopBar = ({ onAddPerson, onImport, onExport, activeTab, onTabChange }) => (
   <header className="topbar">
     <div className="brand">
       <div className="brand-icon">
@@ -12,6 +28,20 @@ const TopBar = ({ onAddPerson, onImport, onExport }) => (
         <p className="brand-subtitle">Vizualizuj, istraži i sačuvaj svoje porijeklo</p>
       </div>
     </div>
+
+    <nav className="topbar-nav">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onTabChange(tab.id)}
+          className={`nav-btn ${activeTab === tab.id ? "is-active" : ""}`}
+        >
+          <tab.icon className="w-4 h-4" />
+          {tab.label}
+        </button>
+      ))}
+    </nav>
 
     <div className="topbar-actions">
       <button onClick={onAddPerson} className="btn-primary">

@@ -1,4 +1,4 @@
-# Pokretanje projekta
+﻿# Pokretanje projekta
 
 Ovo je mali projekat za vođenje porodičnog stabla (frontend + backend).
 
@@ -39,7 +39,7 @@ npm run server
 Ako `npm`/`node` nisu u PATH-u, može pomoći:
 
 ```powershell
-$env:Path = "C:\\Program Files\\nodejs;" + $env:Path
+$env:Path = "C:\Program Files\nodejs;" + $env:Path
 ```
 
 Ako PowerShell blokira skripte, privremeno (samo za ovaj proces):
@@ -47,4 +47,3 @@ Ako PowerShell blokira skripte, privremeno (samo za ovaj proces):
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
-

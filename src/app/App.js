@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, getApiErrorMessage } from "../services/api";
 import { sanitizePeople } from "../features/tree/tree-model";
 import { getVisiblePeople } from "../features/tree/tree-visibility";
 import TopBar from "../layout/TopBar";
-import TabBar from "../layout/TabBar";
 import TreeView from "../features/tree/TreeView";
 import StatsView from "../features/stats/StatsView";
 import SearchView from "../features/search/SearchView";
@@ -159,7 +158,7 @@ const FamilyTreeApp = () => {
 
   const deletePerson = async () => {
     if (!selectedPerson?.id) return;
-    if (window.confirm("Jeste li sigurni da �elite obrisati ovu osobu?")) {
+    if (window.confirm("Jeste li sigurni da želite obrisati ovu osobu?")) {
       try {
         setLoading(true);
         await api(`/api/people/${selectedPerson.id}`, { method: "DELETE" });
@@ -262,8 +261,13 @@ const FamilyTreeApp = () => {
 
   return (
     <div className="app-shell">
-      <TopBar onAddPerson={addNewPerson} onImport={importTree} onExport={exportTree} />
-      <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      <TopBar
+        onAddPerson={addNewPerson}
+        onImport={importTree}
+        onExport={exportTree}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       <main className="content">
         {errorMessage && <div className="alert">{errorMessage}</div>}
@@ -351,3 +355,6 @@ const FamilyTreeApp = () => {
 };
 
 export default FamilyTreeApp;
+
+
+

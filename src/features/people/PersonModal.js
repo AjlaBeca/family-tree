@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Save, Trash2 } from "lucide-react";
 
 const PersonModal = ({
@@ -61,7 +61,6 @@ const PersonModal = ({
       const resized = await resizeImage(file);
       update({ photo: resized || "" });
     } catch {
-      // fallback: try raw file
       const raw = await readFileAsDataUrl(file);
       update({ photo: typeof raw === "string" ? raw : "" });
     }

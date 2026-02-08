@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Layers } from "lucide-react";
 
 const StatsView = ({
@@ -71,3 +71,4 @@ const StatsView = ({
 );
 
 export default StatsView;
+

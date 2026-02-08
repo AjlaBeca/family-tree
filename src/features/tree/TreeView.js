@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react";
+Ôªøimport React, { useCallback, useEffect, useRef } from "react";
 import {
   Plus,
   Upload,
@@ -86,7 +86,12 @@ const TreeView = ({
     });
     diagram.commitTransaction("position-marriage");
 
-    diagram.links.each((link) => link.invalidateRoute());
+    diagram.links.each((link) => {
+      if (link.category === "Spouse") {
+        link.curviness = TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR;
+      }
+      link.invalidateRoute();
+    });
   }, []);
 
   const initDiagram = useCallback(() => {
@@ -284,6 +289,7 @@ const TreeView = ({
           routing: window.go.Link.Normal,
           curve: window.go.Link.Bezier,
           curviness: TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
+          computeCurviness: () => TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
           fromSpot: window.go.Spot.Right,
           toSpot: window.go.Spot.Left,
           fromEndSegmentLength: 0,
@@ -434,31 +440,31 @@ const TreeView = ({
               disabled={!activeFamilyId}
             >
               <Trash2 className="w-4 h-4" />
-              Obriöi porodicu
+              Obri≈°i porodicu
             </button>
           </div>
           {activeFamily && (
-            <p className="family-note">{activeFamily.notes || "Joö nema biljeöki."}</p>
+            <p className="family-note">{activeFamily.notes || "Jo≈° nema bilje≈°ki."}</p>
           )}
         </div>
 
         <div className="panel card">
-          <h3>Saûetak porodice</h3>
+          <h3>Sa≈æetak porodice</h3>
           <div className="stat-grid">
             <div>
               <p className="stat-label">Ukupno</p>
               <p className="stat-value">{stats.total}</p>
             </div>
             <div>
-              <p className="stat-label">éivi</p>
+              <p className="stat-label">≈Ωivi</p>
               <p className="stat-value">{stats.living}</p>
             </div>
             <div>
-              <p className="stat-label">Muöko</p>
+              <p className="stat-label">Mu≈°ko</p>
               <p className="stat-value">{stats.males}</p>
             </div>
             <div>
-              <p className="stat-label">éensko</p>
+              <p className="stat-label">≈Ωensko</p>
               <p className="stat-value">{stats.females}</p>
             </div>
           </div>
@@ -466,7 +472,7 @@ const TreeView = ({
 
         <div className="panel card muted">
           <p>
-            Savjet: Dvaput klikni na osobu u stablu da urediö profil. Koristi minimapu
+            Savjet: Dvaput klikni na osobu u stablu da uredi≈° profil. Koristi minimapu
             za brzo kretanje kroz velike porodice.
           </p>
         </div>
@@ -546,8 +552,8 @@ const TreeView = ({
 
         {people.length === 0 && (
           <div className="empty-state">
-            <h3>Joö nema osoba</h3>
-            <p>Dodaj prvog clana porodice da pocneö graditi ovo stablo.</p>
+            <h3>Jo≈° nema osoba</h3>
+            <p>Dodaj prvog clana porodice da pocne≈° graditi ovo stablo.</p>
             <button onClick={onAddPerson} className="btn-primary">
               <Plus className="w-4 h-4" />
               Dodaj osobu
@@ -560,3 +566,6 @@ const TreeView = ({
 };
 
 export default TreeView;
+
+
+

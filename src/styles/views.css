@@ -1,4 +1,4 @@
-.page {
+﻿.page {
   max-width: 1100px;
   margin: 0 auto;
   display: grid;
@@ -167,3 +167,5 @@
   text-align: center;
   color: var(--ink-500);
 }
+
+
