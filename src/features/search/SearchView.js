@@ -9,6 +9,14 @@ const parseYear = (value) => {
   return parsed;
 };
 
+const getSurname = (name = "") => {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : "";
+};
+
 const SearchView = ({
   searchTerm,
   onSearchChange,
@@ -29,12 +37,14 @@ const SearchView = ({
   const [hasBio, setHasBio] = useState("all");
   const [hasOccupation, setHasOccupation] = useState("all");
   const [hasBurial, setHasBurial] = useState("all");
+  const [surnameFilter, setSurnameFilter] = useState("all");
   const [tagId, setTagId] = useState("0");
   const [birthFrom, setBirthFrom] = useState("");
   const [birthTo, setBirthTo] = useState("");
   const [sortBy, setSortBy] = useState("name-asc");
   const [openDropdown, setOpenDropdown] = useState("");
   const dropdownRootRef = useRef(null);
+  const dropdownTypeaheadRef = useRef({ buffer: "", timer: null });
 
   const pageSize = 12;
   const sourcePeople = useMemo(() => (Array.isArray(people) ? people : []), [people]);
@@ -48,11 +58,15 @@ const SearchView = ({
     const onDocumentKeyDown = (event) => {
       if (event.key === "Escape") setOpenDropdown("");
     };
+    const typeaheadState = dropdownTypeaheadRef.current;
     document.addEventListener("pointerdown", onDocumentPointerDown);
     document.addEventListener("keydown", onDocumentKeyDown);
     return () => {
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("keydown", onDocumentKeyDown);
+      if (typeaheadState.timer) {
+        clearTimeout(typeaheadState.timer);
+      }
     };
   }, []);
 
@@ -79,6 +93,8 @@ const SearchView = ({
       const name = String(person.name || "").toLowerCase();
       const bio = String(person.bio || "").toLowerCase();
       const occupation = String(person.occupation || "").toLowerCase();
+      const studies = String(person.studies || "").toLowerCase();
+      const faculty = String(person.faculty || "").toLowerCase();
       const birthPlace = String(person.birthPlace || "").toLowerCase();
       const burial = String(person.burialPlace || "").toLowerCase();
 
@@ -87,6 +103,8 @@ const SearchView = ({
         !name.includes(query) &&
         !bio.includes(query) &&
         !occupation.includes(query) &&
+        !studies.includes(query) &&
+        !faculty.includes(query) &&
         !birthPlace.includes(query) &&
         !burial.includes(query)
       ) {
@@ -104,6 +122,9 @@ const SearchView = ({
       if (hasOccupation === "no" && String(person.occupation || "").trim()) return false;
       if (hasBurial === "yes" && !String(person.burialPlace || "").trim()) return false;
       if (hasBurial === "no" && String(person.burialPlace || "").trim()) return false;
+      if (surnameFilter !== "all") {
+        if (getSurname(person.name || "").toLowerCase() !== surnameFilter) return false;
+      }
 
       if (selectedTagId > 0) {
         const personTags = tagIdsByPerson.get(Number(person.id || 0));
@@ -136,6 +157,7 @@ const SearchView = ({
     hasBio,
     hasOccupation,
     hasBurial,
+    surnameFilter,
     tagId,
     birthFrom,
     birthTo,
@@ -181,6 +203,7 @@ const SearchView = ({
     setHasBio("all");
     setHasOccupation("all");
     setHasBurial("all");
+    setSurnameFilter("all");
     setTagId("0");
     setBirthFrom("");
     setBirthTo("");
@@ -199,6 +222,64 @@ const SearchView = ({
     return selected ? `Tag: ${selected.name}` : "Tag: svi";
   }, [tagId, tags]);
 
+  const surnameOptions = useMemo(() => {
+    const counts = new Map();
+    sourcePeople.forEach((person) => {
+      const surname = getSurname(person?.name || "");
+      if (!surname) return;
+      const key = surname.toLowerCase();
+      counts.set(key, { key, label: surname, count: (counts.get(key)?.count || 0) + 1 });
+    });
+    return Array.from(counts.values()).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label, "bs", { sensitivity: "base" });
+    });
+  }, [sourcePeople]);
+
+  const selectedSurnameLabel = useMemo(() => {
+    if (surnameFilter === "all") return "Prezime: sva";
+    const selected = surnameOptions.find((row) => row.key === surnameFilter);
+    return selected ? `Prezime: ${selected.label}` : "Prezime: sva";
+  }, [surnameFilter, surnameOptions]);
+
+  const handleDropdownTypeahead = (event, keyName, options, onSelect) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "Backspace") {
+      dropdownTypeaheadRef.current.buffer = dropdownTypeaheadRef.current.buffer.slice(0, -1);
+      return;
+    }
+    if (event.key.length !== 1) return;
+
+    const key = event.key
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (!key) return;
+
+    if (openDropdown !== keyName) {
+      setOpenDropdown(keyName);
+    }
+    dropdownTypeaheadRef.current.buffer += key;
+    if (dropdownTypeaheadRef.current.timer) clearTimeout(dropdownTypeaheadRef.current.timer);
+    dropdownTypeaheadRef.current.timer = setTimeout(() => {
+      dropdownTypeaheadRef.current.buffer = "";
+    }, 700);
+
+    const query = dropdownTypeaheadRef.current.buffer;
+    const match = (options || []).find((option) =>
+      String(option?.label || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .startsWith(query)
+    );
+    if (!match) return;
+
+    event.preventDefault();
+    onSelect(match.value);
+  };
+
   const renderDropdown = ({ keyName, ariaLabel, value, label, options, onSelect }) => (
     <div className="search-dropdown" data-open={openDropdown === keyName ? "1" : "0"}>
       <button
@@ -207,6 +288,7 @@ const SearchView = ({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={openDropdown === keyName}
+        onKeyDown={(event) => handleDropdownTypeahead(event, keyName, options, onSelect)}
         onClick={() => setOpenDropdown((prev) => (prev === keyName ? "" : keyName))}
       >
         <span>{label}</span>
@@ -367,6 +449,21 @@ const SearchView = ({
         })}
 
         {renderDropdown({
+          keyName: "surnameFilter",
+          ariaLabel: "Prezime",
+          value: surnameFilter,
+          label: selectedSurnameLabel,
+          options: [
+            { value: "all", label: "Prezime: sva" },
+            ...surnameOptions.map((row) => ({
+              value: row.key,
+              label: `${row.label} (${row.count})`,
+            })),
+          ],
+          onSelect: (next) => setSurnameFilter(String(next)),
+        })}
+
+        {renderDropdown({
           keyName: "tagId",
           ariaLabel: "Tag",
           value: tagId,
@@ -434,6 +531,10 @@ const SearchView = ({
               </div>
               <p className="search-list-sub">
                 {String(person.occupation || "").trim() || "Bez zanimanja"}
+                {" • "}
+                {String(person.studies || "").trim() || "Bez studiranja"}
+                {" • "}
+                {String(person.faculty || "").trim() || "Bez fakulteta"}
                 {" • "}
                 {String(person.birthPlace || "").trim() || "Bez mjesta rođenja"}
                 {" • "}

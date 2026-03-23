@@ -26,7 +26,6 @@ const FamilyTreeApp = () => {
   const [relationships, setRelationships] = useState([]);
   const [searchPinnedOnly, setSearchPinnedOnly] = useState(false);
   const [statsPinnedOnly, setStatsPinnedOnly] = useState(false);
-  const [galleryPinnedOnly, setGalleryPinnedOnly] = useState(false);
   const [activeTagId, setActiveTagId] = useState(0);
   const [focusPersonId, setFocusPersonId] = useState(null);
   const [expandMode, setExpandMode] = useState("both");
@@ -245,6 +244,8 @@ const FamilyTreeApp = () => {
       deathYear: "",
       birthPlace: "",
       occupation: "",
+      studies: "",
+      faculty: "",
       burialPlace: "",
       photo: "",
       bio: "",
@@ -266,13 +267,62 @@ const FamilyTreeApp = () => {
     setShowModal(true);
   };
 
+  const normalizePersonPayload = useCallback(
+    (person) => {
+      const toId = (value) => {
+        const parsed = Number(value || 0);
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+      };
+      const toIntFlag = (value) => (Number(value) ? 1 : 0);
+      const toStringSafe = (value) => (typeof value === "string" ? value : String(value || ""));
+      const normalizePhotoValue = (value) => {
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          return trimmed.toLowerCase() === "[object object]" ? "" : trimmed;
+        }
+        if (value && typeof value === "object") {
+          const directSrc = typeof value.src === "string" ? value.src.trim() : "";
+          return directSrc.toLowerCase() === "[object object]" ? "" : directSrc;
+        }
+        return "";
+      };
+
+      return {
+        id: toId(person?.id),
+        familyId: toId(activeFamilyId),
+        name: toStringSafe(person?.name).trim(),
+        gender: toStringSafe(person?.gender || "M").toUpperCase() === "F" ? "F" : "M",
+        birthYear: toStringSafe(person?.birthYear).trim(),
+        deathYear: toStringSafe(person?.deathYear).trim(),
+        birthPlace: toStringSafe(person?.birthPlace).trim(),
+        occupation: toStringSafe(person?.occupation).trim(),
+        studies: toStringSafe(person?.studies).trim(),
+        faculty: toStringSafe(person?.faculty).trim(),
+        burialPlace: toStringSafe(person?.burialPlace).trim(),
+        photo: normalizePhotoValue(person?.photo),
+        bio: toStringSafe(person?.bio),
+        parent: toId(person?.parent),
+        parent2: toId(person?.parent2),
+        spouse: toId(person?.spouse),
+        divorced: toIntFlag(person?.divorced),
+        isPinned: toIntFlag(person?.isPinned),
+        pinColor: toStringSafe(person?.pinColor || "#f59e0b").trim() || "#f59e0b",
+      };
+    },
+    [activeFamilyId]
+  );
+
+  const closePersonModal = useCallback(() => {
+    setShowModal(false);
+    setSelectedPerson(null);
+  }, []);
+
   const upsertPerson = async (person) => {
     if (!person) return null;
-    const payload = { ...person, familyId: activeFamilyId };
-    delete payload.key;
+    const payload = normalizePersonPayload(person);
 
-    if (person.id) {
-      return api(`/api/people/${person.id}`, {
+    if (payload.id) {
+      return api(`/api/people/${payload.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -330,6 +380,7 @@ const FamilyTreeApp = () => {
   const savePerson = async ({ person, tagIds = [], health = {} }) => {
     if (!person) return;
     const isNew = !person.id;
+    closePersonModal();
     try {
       setLoading(true);
       const saved = await upsertPerson(person);
@@ -358,8 +409,6 @@ const FamilyTreeApp = () => {
       if (isNew && saved?.id) {
         setFocusPersonId(saved.id);
       }
-      setShowModal(false);
-      setSelectedPerson(null);
     } catch (err) {
       setErrorMessage(getApiErrorMessage(err, "Ne mogu sacuvati osobu."));
     } finally {
@@ -383,7 +432,7 @@ const FamilyTreeApp = () => {
       await loadTagLinks(activeFamilyId);
       await loadRelationships(activeFamilyId);
       await loadPersonHealth(activeFamilyId);
-      setShowModal(false);
+      closePersonModal();
     } catch (err) {
       setErrorMessage(getApiErrorMessage(err, "Ne mogu obrisati osobu."));
     } finally {
@@ -579,10 +628,7 @@ const FamilyTreeApp = () => {
     return { total: statsSourcePeople.length, living, deceased, males, females };
   }, [statsSourcePeople]);
 
-  const galleryPeople = useMemo(
-    () => (galleryPinnedOnly ? peopleWithMeta.filter((p) => p.isPinned) : peopleWithMeta),
-    [peopleWithMeta, galleryPinnedOnly]
-  );
+  const galleryPeople = peopleWithMeta;
 
   const activeFamily = families.find((f) => f.id === activeFamilyId);
   const focusPerson = peopleWithMeta.find((p) => p.id === focusPersonId);
@@ -745,8 +791,6 @@ const FamilyTreeApp = () => {
           <GalleryView
             key={`gallery-${tabResetById.gallery || 0}-${activeFamilyId || 0}`}
             people={galleryPeople}
-            pinnedOnly={galleryPinnedOnly}
-            onPinnedOnlyChange={setGalleryPinnedOnly}
             families={families}
             activeFamilyId={activeFamilyId}
             onFamilyChange={handleFamilyChange}
@@ -793,7 +837,7 @@ const FamilyTreeApp = () => {
         personHealth={selectedPerson ? personHealthMap[selectedPerson.id] || null : null}
         onCreateTag={createTag}
         editMode={editMode}
-        onClose={() => setShowModal(false)}
+        onClose={closePersonModal}
         onSave={savePerson}
         onDelete={deletePerson}
         onChange={setSelectedPerson}

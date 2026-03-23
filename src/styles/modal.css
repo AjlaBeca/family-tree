@@ -11,7 +11,7 @@
 
 .modal {
   width: min(900px, 96vw);
-  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 24px);
   background: white;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
@@ -31,8 +31,10 @@
 .modal-body {
   display: grid;
   gap: 12px;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+  padding-bottom: 8px;
 }
 
 .form-alert {
@@ -277,37 +279,40 @@
 
 .person-modal {
   width: min(1080px, 96vw);
-  max-height: calc(100vh - 18px);
-  gap: 10px;
-  padding: 14px 16px 12px;
+  max-height: calc(100dvh - 10px);
+  gap: 8px;
+  padding: 12px 14px 10px;
 }
 
 .person-modal .modal-header h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.98rem;
   line-height: 1.1;
 }
 
 .person-modal .modal-body {
-  gap: 10px;
-  padding-right: 4px;
+  gap: 8px;
+  min-height: 0;
+  padding-right: 6px;
+  padding-bottom: 20px;
+  overscroll-behavior: contain;
 }
 
 .person-modal .modal-row {
-  gap: 10px;
+  gap: 8px;
 }
 
 .person-modal .modal-body label {
-  gap: 5px;
-  font-size: 0.82rem;
+  gap: 4px;
+  font-size: 0.8rem;
 }
 
 .person-modal .modal-body input,
 .person-modal .modal-body select,
 .person-modal .modal-body textarea {
-  padding: 8px 10px;
-  font-size: 0.9rem;
-  border-radius: 10px;
+  padding: 7px 9px;
+  font-size: 0.88rem;
+  border-radius: 9px;
 }
 
 .person-dropdown {
@@ -394,11 +399,11 @@
 
 .person-modal .modal-body input,
 .person-modal .modal-body select {
-  height: 40px;
+  height: 36px;
 }
 
 .person-modal .modal-body textarea {
-  min-height: 92px;
+  min-height: 82px;
 }
 
 .person-modal .modal-row.person-core-row {
@@ -419,13 +424,13 @@
 }
 
 .person-modal .modal-section {
-  gap: 8px;
-  padding: 10px;
-  border-radius: 10px;
+  gap: 7px;
+  padding: 8px 9px;
+  border-radius: 9px;
 }
 
 .person-modal .section-header h4 {
-  font-size: 0.9rem;
+  font-size: 0.86rem;
 }
 
 .person-modal .tag-input {
@@ -433,27 +438,27 @@
 }
 
 .person-modal .tag-list {
-  max-height: 72px;
+  max-height: 64px;
   overflow-y: auto;
 }
 
 .person-modal .photo-preview {
   display: grid;
-  grid-template-columns: auto minmax(220px, 1fr);
-  align-items: start;
+  grid-template-columns: auto minmax(280px, 1fr);
+  align-items: center;
   justify-content: start;
   justify-self: stretch;
   gap: 10px;
-  padding: 8px;
+  padding: 7px;
   width: 100%;
   max-width: 100%;
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: 10px;
+  overflow: visible;
 }
 
 .person-modal .photo-frame-preview {
-  width: 118px;
-  height: 118px;
+  width: 104px;
+  height: 104px;
 }
 
 .person-modal .photo-editor-popover {
@@ -462,19 +467,27 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  gap: 6px;
-  padding: 8px;
-  border-radius: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 9px;
+  padding: 7px;
+  border-radius: 10px;
 }
 
 .person-modal .photo-editor-popover label {
-  gap: 4px;
-  font-size: 0.76rem;
+  gap: 3px;
+  font-size: 0.74rem;
+}
+
+.person-modal .photo-editor-popover .photo-control {
+  grid-column: 1 / -1;
 }
 
 .person-modal .photo-editor-popover .photo-upload-inline {
+  grid-column: 1 / -1;
   width: 100%;
   justify-content: center;
+  min-height: 34px;
 }
 
 .person-modal .photo-editor-popover input[type="range"] {
@@ -482,15 +495,23 @@
 }
 
 .person-modal .photo-editor-popover .btn-danger.small {
-  height: 30px;
+  grid-column: 1 / -1;
+  height: 32px;
   font-size: 0.8rem;
-  padding: 4px 8px;
+  padding: 5px 8px;
   width: 100%;
   justify-content: center;
 }
 
 .person-modal .modal-footer {
   gap: 10px;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: #fff;
+  border-top: 1px solid var(--border);
+  padding: 10px 0 calc(14px + env(safe-area-inset-bottom));
+  margin-top: 4px;
 }
 
 .person-modal .modal-actions {
@@ -500,9 +521,9 @@
 .person-modal .btn-primary,
 .person-modal .btn-ghost,
 .person-modal .btn-danger {
-  height: 36px;
-  font-size: 0.9rem;
-  padding: 7px 11px;
+  height: 35px;
+  font-size: 0.88rem;
+  padding: 7px 10px;
 }
 
 .confirm-modal-footer {
@@ -527,7 +548,7 @@
 @media (max-width: 860px) {
   .person-modal {
     width: min(720px, 96vw);
-    padding: 8px 9px 9px;
+    padding: 8px 9px 8px;
   }
 
   .person-modal .modal-row {
@@ -541,7 +562,7 @@
 
   .person-modal .photo-preview {
     grid-template-columns: minmax(0, 1fr);
-    justify-items: start;
+    justify-items: center;
   }
 
   .person-modal .photo-editor-popover {
@@ -549,6 +570,7 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
     margin-top: 0;
   }
 }
@@ -586,4 +608,178 @@
   gap: 8px;
   font-size: 0.85rem;
   color: var(--ink-700);
+}
+
+.tag-item input {
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.person-modal-hero {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.person-modal-hero-photo-col {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  justify-items: start;
+}
+
+.person-modal-hero-photo {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 2px solid #ffffff;
+  background: #111827;
+  justify-self: start;
+}
+
+.person-modal-hero-photo .photo-edit-overlay {
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.96);
+  transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+}
+
+.person-modal-hero-photo:hover .photo-edit-overlay,
+.person-modal-hero-photo:focus-within .photo-edit-overlay {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.person-modal-hero-photo .photo-edit-overlay:hover {
+  background: #0f172a;
+}
+
+.person-modal-hero-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-modal-hero-photo-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #f8fafc;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.person-hero-photo-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.person-hero-photo-actions .file-picker {
+  min-height: 36px;
+}
+
+.person-hero-photo-actions .photo-remove-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.person-modal-hero-fields {
+  display: grid;
+  gap: 7px;
+}
+
+.person-hero-core {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.person-life-line {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-700);
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.person-hero-photo-editor {
+  margin-top: 2px;
+}
+
+.legacy-top-fields,
+.legacy-photo-block,
+.legacy-photo-preview,
+.legacy-divorced-toggle {
+  display: none !important;
+}
+
+.person-modal .person-bio-field textarea {
+  min-height: 78px;
+  max-height: 78px;
+  resize: none;
+}
+
+.person-modal .tag-list {
+  max-height: none;
+  overflow: visible;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.person-modal .tag-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  line-height: 1;
+}
+
+.person-modal .tag-item span {
+  display: inline-block;
+  line-height: 1.2;
+}
+
+@media (max-width: 980px) {
+  .person-modal-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .person-modal-hero-photo-col {
+    justify-items: center;
+  }
+
+  .person-modal-hero-photo .photo-edit-overlay {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+  }
+
+  .person-hero-core {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

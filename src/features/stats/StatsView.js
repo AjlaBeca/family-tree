@@ -43,7 +43,6 @@ const buildCompareStats = (people) => {
     total: list.length,
     living: list.filter((p) => !p.deathYear).length,
     deceased: list.filter((p) => Boolean(p.deathYear)).length,
-    pinned: list.filter((p) => Boolean(p.isPinned)).length,
     withPhoto: list.filter((p) => String(p.photo || "").trim()).length,
     maxChildren: list.reduce((max, p) => Math.max(max, childrenByParent.get(p.id) || 0), 0),
     avgLivingAge: avg(agesLiving),
@@ -53,26 +52,38 @@ const buildCompareStats = (people) => {
 const StatsView = ({
   stats,
   people,
-  pinnedOnly,
-  onPinnedOnlyChange,
   families,
   activeFamilyId,
   onFamilyChange,
   activeFamily: _activeFamily,
 }) => {
-  const [compareFamilyId, setCompareFamilyId] = useState(0);
+  const [compareTarget, setCompareTarget] = useState("none");
   const [comparePeopleRaw, setComparePeopleRaw] = useState([]);
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState("");
   const [openDropdown, setOpenDropdown] = useState("");
+  const [selectedSurname, setSelectedSurname] = useState("all");
   const [drilldown, setDrilldown] = useState({ isOpen: false, title: "", people: [] });
   const dropdownRootRef = useRef(null);
+  const dropdownTypeaheadRef = useRef({ buffer: "", timer: null });
 
   useEffect(() => {
-    setCompareFamilyId(0);
+    setCompareTarget("none");
     setComparePeopleRaw([]);
     setCompareError("");
+    setSelectedSurname("all");
   }, [activeFamilyId]);
+
+  const compareTargetMeta = useMemo(() => {
+    const raw = String(compareTarget || "none");
+    if (raw.startsWith("surname:")) {
+      return { type: "surname", key: raw.slice("surname:".length).toLowerCase() };
+    }
+    if (raw.startsWith("family:")) {
+      return { type: "family", id: Number(raw.slice("family:".length) || 0) };
+    }
+    return { type: "none" };
+  }, [compareTarget]);
 
   useEffect(() => {
     const onDocumentPointerDown = (event) => {
@@ -83,16 +94,25 @@ const StatsView = ({
     const onDocumentKeyDown = (event) => {
       if (event.key === "Escape") setOpenDropdown("");
     };
+    const typeaheadState = dropdownTypeaheadRef.current;
     document.addEventListener("pointerdown", onDocumentPointerDown);
     document.addEventListener("keydown", onDocumentKeyDown);
     return () => {
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("keydown", onDocumentKeyDown);
+      if (typeaheadState.timer) {
+        clearTimeout(typeaheadState.timer);
+      }
     };
   }, []);
 
   useEffect(() => {
-    const targetId = Number(compareFamilyId || 0);
+    if (compareTargetMeta.type !== "family") {
+      setComparePeopleRaw([]);
+      setCompareError("");
+      return;
+    }
+    const targetId = Number(compareTargetMeta.id || 0);
     if (!targetId || targetId === Number(activeFamilyId || 0)) {
       setComparePeopleRaw([]);
       setCompareError("");
@@ -120,27 +140,45 @@ const StatsView = ({
     return () => {
       cancelled = true;
     };
-  }, [compareFamilyId, activeFamilyId]);
+  }, [compareTargetMeta, activeFamilyId]);
+
+  const surnameOptions = useMemo(() => {
+    const counts = new Map();
+    (Array.isArray(people) ? people : []).forEach((person) => {
+      const surname = getSurname(person?.name || "");
+      if (!surname) return;
+      const key = surname.toLowerCase();
+      const row = counts.get(key) || { key, label: surname, count: 0 };
+      row.count += 1;
+      counts.set(key, row);
+    });
+    return Array.from(counts.values()).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label || "").localeCompare(String(b.label || ""), "bs", { sensitivity: "base" });
+    });
+  }, [people]);
+
+  const statsPeople = useMemo(() => {
+    const list = Array.isArray(people) ? people : [];
+    if (selectedSurname === "all") return list;
+    return list.filter((person) => getSurname(person?.name || "").toLowerCase() === selectedSurname);
+  }, [people, selectedSurname]);
 
   const detailed = useMemo(() => {
     const now = new Date().getFullYear();
-    const list = Array.isArray(people) ? people : [];
+    const list = statsPeople;
 
     let males = 0;
     let females = 0;
     let unknownGender = 0;
     let living = 0;
     let deceased = 0;
-    let pinned = 0;
     let withSpouse = 0;
     let divorced = 0;
     let withPhoto = 0;
     let withBio = 0;
     let withBothParents = 0;
     let withOneParent = 0;
-    let withNoParents = 0;
-    let hereditaryRisk = 0;
-    let riskFactors = 0;
 
     const agesLiving = [];
     const lifespans = [];
@@ -178,20 +216,16 @@ const StatsView = ({
         if (life >= 0 && life <= 130) lifespans.push(life);
       }
 
-      if (person.isPinned) pinned += 1;
       if (Number(person.spouse || 0) > 0) withSpouse += 1;
       if (Number(person.divorced || 0) > 0) divorced += 1;
       if (String(person.photo || "").trim()) withPhoto += 1;
       if (String(person.bio || "").trim()) withBio += 1;
-      if (person.healthBadge === "hereditary") hereditaryRisk += 1;
-      if (person.healthBadge === "risk") riskFactors += 1;
 
       const p1 = Number(person.parent || 0);
       const p2 = Number(person.parent2 || 0);
       const parentCount = (p1 ? 1 : 0) + (p2 ? 1 : 0);
       if (parentCount === 2) withBothParents += 1;
       else if (parentCount === 1) withOneParent += 1;
-      else withNoParents += 1;
 
       if (p1) childrenByParent.set(p1, (childrenByParent.get(p1) || 0) + 1);
       if (p2) childrenByParent.set(p2, (childrenByParent.get(p2) || 0) + 1);
@@ -203,8 +237,6 @@ const StatsView = ({
       }
     });
 
-    const roots = withNoParents;
-    const leaves = list.filter((p) => !childrenByParent.get(p.id)).length;
     const maxChildren = list.reduce(
       (max, p) => Math.max(max, childrenByParent.get(p.id) || 0),
       0
@@ -258,18 +290,12 @@ const StatsView = ({
       males,
       females,
       unknownGender,
-      pinned,
       withSpouse,
       divorced,
       withPhoto,
       withBio,
       withBothParents,
       withOneParent,
-      withNoParents,
-      hereditaryRisk,
-      riskFactors,
-      roots,
-      leaves,
       maxChildren,
       oldestLiving,
       youngestLiving,
@@ -284,7 +310,7 @@ const StatsView = ({
       topParents,
       decadeRows,
     };
-  }, [people]);
+  }, [statsPeople]);
 
   const genderBase = detailed.males + detailed.females + detailed.unknownGender;
   const malePct = genderBase ? (detailed.males / genderBase) * 100 : 0;
@@ -309,14 +335,11 @@ const StatsView = ({
     { label: "Ukupno clanova", value: detailed.total },
     { label: "Zivi", value: detailed.living },
     { label: "Preminuli", value: detailed.deceased },
-    { label: "Pinovani", value: detailed.pinned },
     { label: "Prosjecna dob (zivi)", value: `${detailed.avgLivingAge.toFixed(1)} g` },
     { label: "Maks djece po osobi", value: detailed.maxChildren },
   ];
 
   const secondaryKpis = [
-    { label: "Korijenski cvorovi", value: detailed.roots },
-    { label: "List cvorovi", value: detailed.leaves },
     { label: "Najstariji zivi", value: detailed.oldestLiving ? `${detailed.oldestLiving} g` : "-" },
     { label: "Najmladji zivi", value: detailed.youngestLiving ? `${detailed.youngestLiving} g` : "-" },
     { label: "Prosjecni zivotni vijek", value: `${detailed.avgLifespan.toFixed(1)} g` },
@@ -324,26 +347,33 @@ const StatsView = ({
     { label: "Najkasnije rođenje", value: detailed.latestBirth || "-" },
     { label: "Najranija smrt", value: detailed.earliestDeath || "-" },
     { label: "Najkasnija smrt", value: detailed.latestDeath || "-" },
-    { label: "Nasljedni rizik", value: detailed.hereditaryRisk },
-    { label: "Rizični faktori", value: detailed.riskFactors },
   ];
+  const allKpis = [...primaryKpis, ...secondaryKpis];
 
   const compareFamilies = useMemo(
     () => (families || []).filter((family) => Number(family.id) !== Number(activeFamilyId || 0)),
     [families, activeFamilyId]
   );
 
-  const compareFamily = useMemo(
-    () => (families || []).find((family) => Number(family.id) === Number(compareFamilyId || 0)) || null,
-    [families, compareFamilyId]
-  );
+  const compareFamily = useMemo(() => {
+    if (compareTargetMeta.type !== "family") return null;
+    return (families || []).find((family) => Number(family.id) === Number(compareTargetMeta.id || 0)) || null;
+  }, [families, compareTargetMeta]);
 
-  const comparePeople = useMemo(
-    () => (pinnedOnly ? comparePeopleRaw.filter((p) => p.isPinned) : comparePeopleRaw),
-    [comparePeopleRaw, pinnedOnly]
-  );
+  const comparePeople = useMemo(() => {
+    if (compareTargetMeta.type === "surname") {
+      const key = String(compareTargetMeta.key || "").toLowerCase();
+      return (Array.isArray(people) ? people : []).filter(
+        (person) => getSurname(person?.name || "").toLowerCase() === key
+      );
+    }
+    if (compareTargetMeta.type === "family") {
+      return comparePeopleRaw;
+    }
+    return [];
+  }, [compareTargetMeta, people, comparePeopleRaw]);
 
-  const currentCompare = useMemo(() => buildCompareStats(people), [people]);
+  const currentCompare = useMemo(() => buildCompareStats(statsPeople), [statsPeople]);
   const otherCompare = useMemo(() => buildCompareStats(comparePeople), [comparePeople]);
 
   const compareRows = useMemo(
@@ -351,7 +381,6 @@ const StatsView = ({
       { key: "total", label: "Ukupno clanova", decimals: 0 },
       { key: "living", label: "Zivi", decimals: 0 },
       { key: "deceased", label: "Preminuli", decimals: 0 },
-      { key: "pinned", label: "Pinovani", decimals: 0 },
       { key: "withPhoto", label: "Sa fotografijom", decimals: 0 },
       { key: "maxChildren", label: "Maks djece po osobi", decimals: 0 },
       { key: "avgLivingAge", label: "Prosjecna dob (zivi)", decimals: 1, suffix: " g" },
@@ -359,7 +388,7 @@ const StatsView = ({
     []
   );
 
-  const peopleList = useMemo(() => (Array.isArray(people) ? people : []), [people]);
+  const peopleList = useMemo(() => statsPeople, [statsPeople]);
 
   const surnameMembersMap = useMemo(() => {
     const map = new Map();
@@ -410,11 +439,78 @@ const StatsView = ({
     return selected?.name || "Bez porodice";
   }, [families, activeFamilyId]);
 
+  const selectedSurnameLabel = useMemo(() => {
+    if (selectedSurname === "all") return "Prezime: sva";
+    const selected = surnameOptions.find((row) => row.key === selectedSurname);
+    return selected ? `Prezime: ${selected.label}` : "Prezime: sva";
+  }, [selectedSurname, surnameOptions]);
+
   const selectedCompareLabel = useMemo(() => {
-    if (!compareFamilyId) return "Bez poredjenja";
-    const selected = (families || []).find((family) => Number(family.id) === Number(compareFamilyId));
-    return selected?.name || "Bez poredjenja";
-  }, [families, compareFamilyId]);
+    if (compareTargetMeta.type === "surname") {
+      const selected = surnameOptions.find((row) => row.key === compareTargetMeta.key);
+      return selected ? `Prezime: ${selected.label}` : "Bez poredjenja";
+    }
+    if (compareTargetMeta.type === "family") {
+      const selected = (families || []).find((family) => Number(family.id) === Number(compareTargetMeta.id || 0));
+      return selected ? `Stablo: ${selected.name}` : "Bez poredjenja";
+    }
+    return "Bez poredjenja";
+  }, [compareTargetMeta, surnameOptions, families]);
+
+  const selectedCompareColumnLabel = useMemo(() => {
+    if (compareTargetMeta.type === "surname") {
+      const selected = surnameOptions.find((row) => row.key === compareTargetMeta.key);
+      return selected ? `Prezime ${selected.label}` : "Druga grupa";
+    }
+    if (compareTargetMeta.type === "family") {
+      return compareFamily?.name || "Drugo stablo";
+    }
+    return "Druga grupa";
+  }, [compareTargetMeta, surnameOptions, compareFamily]);
+
+  const comparePanelTitle = useMemo(() => {
+    if (compareTargetMeta.type === "surname") return "Poredjenje po prezimenima";
+    if (compareTargetMeta.type === "family") return "Poredjenje cijelih stabala";
+    return "Poredjenje";
+  }, [compareTargetMeta]);
+
+  const handleDropdownTypeahead = (event, keyName, options, onSelect) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "Backspace") {
+      dropdownTypeaheadRef.current.buffer = dropdownTypeaheadRef.current.buffer.slice(0, -1);
+      return;
+    }
+    if (event.key.length !== 1) return;
+
+    const key = event.key
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (!key) return;
+
+    if (openDropdown !== keyName) {
+      setOpenDropdown(keyName);
+    }
+    dropdownTypeaheadRef.current.buffer += key;
+    if (dropdownTypeaheadRef.current.timer) clearTimeout(dropdownTypeaheadRef.current.timer);
+    dropdownTypeaheadRef.current.timer = setTimeout(() => {
+      dropdownTypeaheadRef.current.buffer = "";
+    }, 700);
+
+    const query = dropdownTypeaheadRef.current.buffer;
+    const match = (options || []).find((option) =>
+      String(option?.label || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .startsWith(query)
+    );
+    if (!match) return;
+
+    event.preventDefault();
+    onSelect(match.value);
+  };
 
   return (
     <div className="panel page stats-page" ref={dropdownRootRef}>
@@ -432,6 +528,14 @@ const StatsView = ({
                 aria-label="Aktivna porodica"
                 aria-haspopup="listbox"
                 aria-expanded={openDropdown === "family"}
+                onKeyDown={(event) =>
+                  handleDropdownTypeahead(
+                    event,
+                    "family",
+                    (families || []).map((family) => ({ value: Number(family.id), label: family.name })),
+                    (nextFamilyId) => onFamilyChange(Number(nextFamilyId))
+                  )
+                }
                 onClick={() => setOpenDropdown((prev) => (prev === "family" ? "" : "family"))}
               >
                 <span>{selectedFamilyLabel}</span>
@@ -460,15 +564,82 @@ const StatsView = ({
               )}
             </div>
           </div>
+          <div className="stats-dropdown stats-dropdown-compact">
+            <button
+              type="button"
+              className="stats-dropdown-trigger stats-dropdown-trigger-compact"
+              aria-label="Filter po prezimenu"
+              aria-haspopup="listbox"
+              aria-expanded={openDropdown === "surname"}
+              onKeyDown={(event) =>
+                handleDropdownTypeahead(
+                  event,
+                  "surname",
+                  [
+                    { value: "all", label: "Prezime: sva" },
+                    ...surnameOptions.map((row) => ({ value: row.key, label: row.label })),
+                  ],
+                  (nextSurname) => setSelectedSurname(String(nextSurname))
+                )
+              }
+              onClick={() => setOpenDropdown((prev) => (prev === "surname" ? "" : "surname"))}
+            >
+              <span>{selectedSurnameLabel}</span>
+              <ChevronDown className={`stats-dropdown-chevron ${openDropdown === "surname" ? "is-open" : ""}`} />
+            </button>
+            {openDropdown === "surname" && (
+              <div className="stats-dropdown-menu" role="listbox" aria-label="Prezime opcije">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selectedSurname === "all"}
+                  className={`stats-dropdown-option ${selectedSurname === "all" ? "is-selected" : ""}`}
+                  onClick={() => {
+                    setSelectedSurname("all");
+                    setOpenDropdown("");
+                  }}
+                >
+                  Prezime: sva
+                </button>
+                {surnameOptions.map((row) => (
+                  <button
+                    key={row.key}
+                    type="button"
+                    role="option"
+                    aria-selected={selectedSurname === row.key}
+                    className={`stats-dropdown-option ${selectedSurname === row.key ? "is-selected" : ""}`}
+                    onClick={() => {
+                      setSelectedSurname(row.key);
+                      setOpenDropdown("");
+                    }}
+                  >
+                    {row.label} ({row.count})
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="stats-compare-picker stats-compare-picker-inline">
             <span>Poredi sa:</span>
             <div className="stats-dropdown stats-dropdown-compact">
               <button
                 type="button"
                 className="stats-dropdown-trigger stats-dropdown-trigger-compact"
-                aria-label="Poredi sa porodicom"
+                aria-label="Poredi sa prezimenom ili stablom"
                 aria-haspopup="listbox"
                 aria-expanded={openDropdown === "compare"}
+                onKeyDown={(event) =>
+                  handleDropdownTypeahead(
+                    event,
+                    "compare",
+                    [
+                      { value: "none", label: "Bez poredjenja" },
+                      ...surnameOptions.map((row) => ({ value: `surname:${row.key}`, label: row.label })),
+                      ...compareFamilies.map((family) => ({ value: `family:${family.id}`, label: family.name })),
+                    ],
+                    (nextTarget) => setCompareTarget(String(nextTarget))
+                  )
+                }
                 onClick={() => setOpenDropdown((prev) => (prev === "compare" ? "" : "compare"))}
               >
                 <span>{selectedCompareLabel}</span>
@@ -479,44 +650,56 @@ const StatsView = ({
                   <button
                     type="button"
                     role="option"
-                    aria-selected={!compareFamilyId}
-                    className={`stats-dropdown-option ${!compareFamilyId ? "is-selected" : ""}`}
+                    aria-selected={compareTargetMeta.type === "none"}
+                    className={`stats-dropdown-option ${compareTargetMeta.type === "none" ? "is-selected" : ""}`}
                     onClick={() => {
-                      setCompareFamilyId(0);
+                      setCompareTarget("none");
                       setOpenDropdown("");
                     }}
                   >
                     Bez poredjenja
                   </button>
+                  <div className="stats-dropdown-group-label">Prezimena (aktivno stablo)</div>
+                  {surnameOptions.map((row) => {
+                    const optionValue = `surname:${row.key}`;
+                    return (
+                      <button
+                        key={`cmp-surname-${row.key}`}
+                        type="button"
+                        role="option"
+                        aria-selected={compareTarget === optionValue}
+                        className={`stats-dropdown-option ${compareTarget === optionValue ? "is-selected" : ""}`}
+                        onClick={() => {
+                          setCompareTarget(optionValue);
+                          setOpenDropdown("");
+                        }}
+                      >
+                        {row.label} ({row.count})
+                      </button>
+                    );
+                  })}
+                  <div className="stats-dropdown-group-label">Cijela druga stabla</div>
                   {compareFamilies.map((family) => (
                     <button
                       key={family.id}
                       type="button"
                       role="option"
-                      aria-selected={Number(compareFamilyId) === Number(family.id)}
+                      aria-selected={compareTarget === `family:${Number(family.id)}`}
                       className={`stats-dropdown-option ${
-                        Number(compareFamilyId) === Number(family.id) ? "is-selected" : ""
+                        compareTarget === `family:${Number(family.id)}` ? "is-selected" : ""
                       }`}
                       onClick={() => {
-                        setCompareFamilyId(Number(family.id));
+                        setCompareTarget(`family:${Number(family.id)}`);
                         setOpenDropdown("");
                       }}
                     >
-                      {family.name}
+                      Stablo: {family.name}
                     </button>
                   ))}
                 </div>
               )}
             </div>
           </div>
-          <label className="inline-check">
-            <input
-              type="checkbox"
-              checked={Boolean(pinnedOnly)}
-              onChange={(e) => onPinnedOnlyChange(e.target.checked)}
-            />
-            <span>Samo pinovani</span>
-          </label>
         </div>
       </div>
 
@@ -526,18 +709,12 @@ const StatsView = ({
           <span className="stats-kpi-total">{detailed.total} clanova</span>
         </div>
 
-        <div className="stats-cards stats-cards-primary">
-          {primaryKpis.map((item) => (
-            <div className="stat-card stat-card-primary" key={item.label}>
-              <p className="stat-label">{item.label}</p>
-              <p className="stat-value">{item.value}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="stats-cards stats-cards-secondary">
-          {secondaryKpis.map((item) => (
-            <div className="stat-card stat-card-secondary" key={item.label}>
+        <div className="stats-cards stats-cards-all">
+          {allKpis.map((item, index) => (
+            <div
+              className={`stat-card ${index < primaryKpis.length ? "stat-card-primary" : "stat-card-secondary"}`}
+              key={item.label}
+            >
               <p className="stat-label">{item.label}</p>
               <p className="stat-value">{item.value}</p>
             </div>
@@ -545,20 +722,20 @@ const StatsView = ({
         </div>
       </div>
 
-      {(Boolean(compareFamilyId) || compareLoading || Boolean(compareError)) && (
+      {(compareTargetMeta.type !== "none" || compareLoading || Boolean(compareError)) && (
         <div className="card stats-compare-panel">
           <div className="stats-compare-head">
-            <h3>Poredjenje porodica</h3>
+            <h3>{comparePanelTitle}</h3>
           </div>
           {compareLoading && <p className="muted-text">Ucitavanje poredjenja...</p>}
           {compareError && <p className="muted-text" style={{ color: "#b91c1c" }}>{compareError}</p>}
 
-          {Boolean(compareFamilyId) && !compareLoading && !compareError && (
+          {compareTargetMeta.type !== "none" && !compareLoading && !compareError && (
             <div className="stats-compare-grid">
               <div className="stats-compare-row stats-compare-head-row">
                 <span>Metrika</span>
                 <span>Aktivna</span>
-                <span>{compareFamily?.name || "Druga porodica"}</span>
+                <span>{selectedCompareColumnLabel}</span>
                 <span>Razlika</span>
               </div>
               {compareRows.map((row) => {
@@ -753,5 +930,3 @@ const StatsView = ({
 };
 
 export default StatsView;
-
-

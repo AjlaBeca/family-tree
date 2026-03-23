@@ -92,7 +92,9 @@ export const buildModelData = (people, options = {}) => {
     if (node.category) return;
     const branchKey = getBranchKey(node);
     const colors = colorByBranch.get(branchKey);
-    if (colors) {
+    const hasCustomStroke = typeof node.cardStroke === "string" && node.cardStroke.trim().length > 0;
+    const hasCustomFill = typeof node.cardFill === "string" && node.cardFill.trim().length > 0;
+    if (colors && !hasCustomStroke && !hasCustomFill) {
       node.cardStroke = colors.cardStroke;
       node.cardFill = colors.cardFill;
     }

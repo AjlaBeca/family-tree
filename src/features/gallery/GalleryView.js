@@ -31,6 +31,14 @@ const isValidImageSource = (value) => {
   return lowered !== "null" && lowered !== "undefined";
 };
 
+const getSurname = (name = "") => {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : "";
+};
+
 const normalizeGalleryRows = (rows) => {
   if (!Array.isArray(rows)) return [];
   return rows
@@ -68,8 +76,6 @@ const normalizeGalleryRows = (rows) => {
 
 const GalleryView = ({
   people,
-  pinnedOnly,
-  onPinnedOnlyChange,
   families,
   activeFamilyId,
   onFamilyChange,
@@ -92,8 +98,10 @@ const GalleryView = ({
   const [gridQuery, setGridQuery] = useState("");
   const [gridSort, setGridSort] = useState("newest");
   const [gridTaggedOnly, setGridTaggedOnly] = useState(false);
+  const [surnameFilter, setSurnameFilter] = useState("all");
   const dragMovedRef = useRef(false);
   const dropdownRootRef = useRef(null);
+  const dropdownTypeaheadRef = useRef({ buffer: "", timer: null });
   const [openDropdown, setOpenDropdown] = useState("");
 
   const loadGalleryRows = async (familyId) => {
@@ -156,6 +164,7 @@ const GalleryView = ({
     setGridQuery("");
     setGridSort("newest");
     setGridTaggedOnly(false);
+    setSurnameFilter("all");
     setOpenDropdown("");
   }, [activeFamilyId]);
 
@@ -168,20 +177,41 @@ const GalleryView = ({
     const onDocumentKeyDown = (event) => {
       if (event.key === "Escape") setOpenDropdown("");
     };
+    const typeaheadState = dropdownTypeaheadRef.current;
     document.addEventListener("pointerdown", onDocumentPointerDown);
     document.addEventListener("keydown", onDocumentKeyDown);
     return () => {
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("keydown", onDocumentKeyDown);
+      if (typeaheadState.timer) {
+        clearTimeout(typeaheadState.timer);
+      }
     };
   }, []);
 
   const allPeople = useMemo(() => (Array.isArray(people) ? people : []), [people]);
 
-  const peopleList = useMemo(
-    () => (pinnedOnly ? allPeople.filter((p) => p.isPinned) : allPeople),
-    [allPeople, pinnedOnly]
-  );
+  const peopleList = useMemo(() => allPeople, [allPeople]);
+
+  const surnameOptions = useMemo(() => {
+    const counts = new Map();
+    allPeople.forEach((person) => {
+      const surname = getSurname(person?.name || "");
+      if (!surname) return;
+      const key = surname.toLowerCase();
+      counts.set(key, { key, label: surname, count: (counts.get(key)?.count || 0) + 1 });
+    });
+    return Array.from(counts.values()).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label, "bs", { sensitivity: "base" });
+    });
+  }, [allPeople]);
+
+  const selectedSurnameLabel = useMemo(() => {
+    if (surnameFilter === "all") return "Prezime: sva";
+    const selected = surnameOptions.find((row) => row.key === surnameFilter);
+    return selected ? `Prezime: ${selected.label}` : "Prezime: sva";
+  }, [surnameFilter, surnameOptions]);
 
   const personById = useMemo(
     () => new Map(allPeople.map((p) => [Number(p.id), p])),
@@ -212,15 +242,25 @@ const GalleryView = ({
 
   const filteredPeople = useMemo(() => {
     const q = peopleSearch.trim().toLowerCase();
-    if (!q) return peopleList;
-    return peopleList.filter((p) => String(p.name || "").toLowerCase().includes(q));
-  }, [peopleList, peopleSearch]);
+    return peopleList.filter((p) => {
+      if (surnameFilter !== "all" && getSurname(p.name || "").toLowerCase() !== surnameFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return String(p.name || "").toLowerCase().includes(q);
+    });
+  }, [peopleList, peopleSearch, surnameFilter]);
 
   const taggablePeople = useMemo(() => {
     const q = tagSearch.trim().toLowerCase();
-    if (!q) return allPeople;
-    return allPeople.filter((p) => String(p.name || "").toLowerCase().includes(q));
-  }, [allPeople, tagSearch]);
+    return allPeople.filter((p) => {
+      if (surnameFilter !== "all" && getSurname(p.name || "").toLowerCase() !== surnameFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return String(p.name || "").toLowerCase().includes(q);
+    });
+  }, [allPeople, tagSearch, surnameFilter]);
 
   const taggedPhotosCount = useMemo(
     () => album.filter((photo) => Array.isArray(photo.tags) && photo.tags.length > 0).length,
@@ -244,6 +284,13 @@ const GalleryView = ({
 
     next = next.filter((photo) => {
       if (gridTaggedOnly && (!Array.isArray(photo.tags) || photo.tags.length === 0)) return false;
+      if (surnameFilter !== "all") {
+        const hasSurnameTag = (photo.tags || []).some((tag) => {
+          const person = personById.get(Number(tag.personId || 0));
+          return getSurname(person?.name || "").toLowerCase() === surnameFilter;
+        });
+        if (!hasSurnameTag) return false;
+      }
       if (!q) return true;
       const description = String(photo.description || "").toLowerCase();
       const location = String(photo.location || "").toLowerCase();
@@ -262,7 +309,7 @@ const GalleryView = ({
     }
 
     return next;
-  }, [album, gridQuery, gridSort, gridTaggedOnly, personById]);
+  }, [album, gridQuery, gridSort, gridTaggedOnly, personById, surnameFilter]);
 
   const openPhotoEditor = (photoId) => {
     if (!photoId) return;
@@ -562,6 +609,44 @@ const GalleryView = ({
     }
   };
 
+  const handleDropdownTypeahead = (event, keyName, options, onSelect) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "Backspace") {
+      dropdownTypeaheadRef.current.buffer = dropdownTypeaheadRef.current.buffer.slice(0, -1);
+      return;
+    }
+    if (event.key.length !== 1) return;
+
+    const key = event.key
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+    if (!key) return;
+
+    if (openDropdown !== keyName) {
+      setOpenDropdown(keyName);
+    }
+    dropdownTypeaheadRef.current.buffer += key;
+    if (dropdownTypeaheadRef.current.timer) clearTimeout(dropdownTypeaheadRef.current.timer);
+    dropdownTypeaheadRef.current.timer = setTimeout(() => {
+      dropdownTypeaheadRef.current.buffer = "";
+    }, 700);
+
+    const query = dropdownTypeaheadRef.current.buffer;
+    const match = (options || []).find((option) =>
+      String(option?.label || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .startsWith(query)
+    );
+    if (!match) return;
+
+    event.preventDefault();
+    onSelect(match.value);
+  };
+
   const renderDropdown = ({ keyName, ariaLabel, value, label, options, onSelect, className = "" }) => (
     <div className={`gallery-dropdown ${className}`.trim()} data-open={openDropdown === keyName ? "1" : "0"}>
       <button
@@ -570,6 +655,7 @@ const GalleryView = ({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={openDropdown === keyName}
+        onKeyDown={(event) => handleDropdownTypeahead(event, keyName, options, onSelect)}
         onClick={() => setOpenDropdown((prev) => (prev === keyName ? "" : keyName))}
       >
         <span>{label}</span>
@@ -624,15 +710,21 @@ const GalleryView = ({
               className: "gallery-family-dropdown",
             })}
           </div>
-
-          <label className="inline-check">
-            <input
-              type="checkbox"
-              checked={Boolean(pinnedOnly)}
-              onChange={(e) => onPinnedOnlyChange(e.target.checked)}
-            />
-            <span>Samo pinovani</span>
-          </label>
+          {renderDropdown({
+            keyName: "surnameFilter",
+            ariaLabel: "Filter prezimena",
+            value: surnameFilter,
+            label: selectedSurnameLabel,
+            options: [
+              { value: "all", label: "Prezime: sva" },
+              ...surnameOptions.map((row) => ({
+                value: row.key,
+                label: `${row.label} (${row.count})`,
+              })),
+            ],
+            onSelect: (next) => setSurnameFilter(String(next)),
+            className: "gallery-family-dropdown",
+          })}
 
           <div className="gallery-hero-actions no-divider">
             <label className="btn-icon" title="Dodaj slike" aria-label="Dodaj slike">

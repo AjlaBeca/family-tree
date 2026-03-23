@@ -7,6 +7,33 @@ const parseCsv = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const isPrivateIpv4Host = (hostname) => {
+  const text = String(hostname || "").trim();
+  if (!text) return false;
+  if (/^10\./.test(text)) return true;
+  if (/^192\.168\./.test(text)) return true;
+  const match172 = text.match(/^172\.(\d{1,3})\./);
+  if (match172) {
+    const second = Number(match172[1]);
+    if (Number.isInteger(second) && second >= 16 && second <= 31) return true;
+  }
+  return false;
+};
+
+const isImplicitlyAllowedDevOrigin = (origin) => {
+  try {
+    const parsed = new URL(String(origin || ""));
+    const protocol = String(parsed.protocol || "").toLowerCase();
+    if (protocol !== "http:" && protocol !== "https:") return false;
+    const host = String(parsed.hostname || "").toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
+    if (isPrivateIpv4Host(host)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 const getAllowedOrigins = () => {
   const configured = parseCsv(process.env.CORS_ORIGINS);
   if (configured.length > 0) return configured;
@@ -21,10 +48,30 @@ const getAllowedOrigins = () => {
 const createCorsOptions = () => {
   const allowedOrigins = getAllowedOrigins();
   const allowAll = allowedOrigins.includes("*");
+  const allowConfiguredByHost = (origin) => {
+    try {
+      const incoming = new URL(String(origin || ""));
+      return allowedOrigins.some((item) => {
+        try {
+          const cfg = new URL(String(item || ""));
+          return (
+            String(cfg.hostname || "").toLowerCase() === String(incoming.hostname || "").toLowerCase()
+          );
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return false;
+    }
+  };
   return {
     origin(origin, callback) {
       if (!origin) return callback(null, true);
       if (allowAll || allowedOrigins.includes(origin)) return callback(null, true);
+      if (allowConfiguredByHost(origin)) return callback(null, true);
+      if (isImplicitlyAllowedDevOrigin(origin)) return callback(null, true);
+      console.warn(`[CORS] Blocked origin: ${origin}`);
       return callback(new Error("Origin not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

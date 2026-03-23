@@ -27,6 +27,7 @@ const PersonModal = ({
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [photoSource, setPhotoSource] = useState("");
   const [photoFileName, setPhotoFileName] = useState("");
+  const [photoDirty, setPhotoDirty] = useState(false);
   const [photoFrame, setPhotoFrame] = useState({
     zoom: 1,
     offsetX: 0,
@@ -36,6 +37,8 @@ const PersonModal = ({
   const prevPersonIdRef = useRef(null);
   const prevOpenRef = useRef(false);
   const dropdownRootRef = useRef(null);
+  const dropdownTypeaheadRef = useRef({ buffer: "", timer: null });
+  const heroPhotoInputRef = useRef(null);
 
   useEffect(() => {
     setTagSelections(selectedTagIds || []);
@@ -63,6 +66,7 @@ const PersonModal = ({
       setPhotoEditorOpen(false);
       setPhotoSource(String(person?.photo || ""));
       setPhotoFileName("");
+      setPhotoDirty(false);
       setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
     }
 
@@ -79,15 +83,32 @@ const PersonModal = ({
     const onDocumentKeyDown = (event) => {
       if (event.key === "Escape") setOpenDropdown("");
     };
+    const typeaheadState = dropdownTypeaheadRef.current;
     document.addEventListener("pointerdown", onDocumentPointerDown);
     document.addEventListener("keydown", onDocumentKeyDown);
     return () => {
       document.removeEventListener("pointerdown", onDocumentPointerDown);
       document.removeEventListener("keydown", onDocumentKeyDown);
+      if (typeaheadState.timer) {
+        clearTimeout(typeaheadState.timer);
+      }
     };
   }, []);
 
   if (!isOpen || !person) return null;
+
+  const normalizePhotoValue = (value) => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.toLowerCase() === "[object object]" ? "" : trimmed;
+    }
+    if (value && typeof value === "object") {
+      const src = String(value.src || "").trim();
+      return src.toLowerCase() === "[object object]" ? "" : src;
+    }
+    return "";
+  };
+  const safePersonPhoto = normalizePhotoValue(person.photo);
 
   const update = (changes) => {
     onChange({ ...person, ...changes });
@@ -147,7 +168,6 @@ const PersonModal = ({
           resolve(source);
           return;
         }
-
         const zoom = Math.max(1, Math.min(3, Number(frame.zoom || 1)));
         const scale = Math.max(size / img.width, size / img.height) * zoom;
         const drawW = img.width * scale;
@@ -159,15 +179,8 @@ const PersonModal = ({
           (size - drawH) / 2 + (Math.max(-100, Math.min(100, Number(frame.offsetY || 0))) / 100) * moveLimit;
 
         ctx.clearRect(0, 0, size, size);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.clip();
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
-        ctx.restore();
-
-        resolve(canvas.toDataURL("image/png"));
+        resolve(canvas.toDataURL("image/jpeg", 0.9));
       };
       img.onerror = () => resolve(source);
       img.src = source;
@@ -182,6 +195,7 @@ const PersonModal = ({
       setPhotoSource(src);
       setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
       const rounded = await buildCircularPhoto(src, { zoom: 1, offsetX: 0, offsetY: 0 });
+      setPhotoDirty(true);
       update({ photo: rounded || resized || "" });
       setPhotoEditorOpen(true);
     } catch {
@@ -190,6 +204,7 @@ const PersonModal = ({
       setPhotoSource(rawSource);
       setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
       const rounded = await buildCircularPhoto(rawSource, { zoom: 1, offsetX: 0, offsetY: 0 });
+      setPhotoDirty(true);
       update({ photo: rounded || rawSource });
       setPhotoEditorOpen(true);
     }
@@ -199,7 +214,10 @@ const PersonModal = ({
     setPhotoFrame(nextFrame);
     if (!photoSource) return;
     const rounded = await buildCircularPhoto(photoSource, nextFrame);
-    if (rounded) update({ photo: rounded });
+    if (rounded) {
+      setPhotoDirty(true);
+      update({ photo: rounded });
+    }
   };
 
   const isDescendantParentChoice = (candidateParentId) => {
@@ -259,6 +277,44 @@ const PersonModal = ({
   const renderPersonDropdown = ({ keyName, value, options, onSelect, ariaLabel }) => {
     const selected = options.find((option) => String(option.value) === String(value));
     const label = selected?.label || options[0]?.label || "";
+    const handleTypeahead = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === "Backspace") {
+        dropdownTypeaheadRef.current.buffer = dropdownTypeaheadRef.current.buffer.slice(0, -1);
+        return;
+      }
+      if (event.key.length !== 1) return;
+
+      const key = event.key
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+      if (!key) return;
+
+      if (openDropdown !== keyName) {
+        setOpenDropdown(keyName);
+      }
+      dropdownTypeaheadRef.current.buffer += key;
+      if (dropdownTypeaheadRef.current.timer) clearTimeout(dropdownTypeaheadRef.current.timer);
+      dropdownTypeaheadRef.current.timer = setTimeout(() => {
+        dropdownTypeaheadRef.current.buffer = "";
+      }, 700);
+
+      const query = dropdownTypeaheadRef.current.buffer;
+      const match = (options || []).find((option) =>
+        String(option?.label || "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .startsWith(query)
+      );
+      if (!match) return;
+
+      event.preventDefault();
+      onSelect(match.value);
+    };
+
     return (
       <div className="person-dropdown">
         <button
@@ -267,6 +323,7 @@ const PersonModal = ({
           aria-label={ariaLabel}
           aria-haspopup="listbox"
           aria-expanded={openDropdown === keyName}
+          onKeyDown={handleTypeahead}
           onClick={() => setOpenDropdown((prev) => (prev === keyName ? "" : keyName))}
         >
           <span>{label}</span>
@@ -310,7 +367,157 @@ const PersonModal = ({
         <div className="modal-body">
           {formError && <div className="form-alert">{formError}</div>}
 
-          <div className="modal-row person-core-row">
+          <div className="person-modal-hero">
+            <div className="person-modal-hero-photo-col">
+              <div className="person-modal-hero-photo">
+                {safePersonPhoto ? (
+                  <img src={safePersonPhoto} alt={person.name || "Profilna"} />
+                ) : (
+                  <div className="person-modal-hero-photo-fallback">
+                    {String(person.name || "")
+                      .trim()
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((part) => part[0] || "")
+                      .join("")
+                      .toUpperCase() || "?"}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="btn-icon photo-edit-overlay"
+                  onClick={() => {
+                    if (safePersonPhoto) {
+                      setPhotoEditorOpen((open) => !open);
+                      return;
+                    }
+                    heroPhotoInputRef.current?.click();
+                  }}
+                  title={safePersonPhoto ? "Uredi fotografiju" : "Dodaj fotografiju"}
+                  aria-label={safePersonPhoto ? "Uredi fotografiju" : "Dodaj fotografiju"}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <input
+                  ref={heroPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files && e.target.files[0];
+                    setPhotoFileName(file?.name || "");
+                    handlePhotoUpload(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="person-modal-hero-fields">
+              <div className="modal-row person-hero-core">
+                <label>
+                  Ime
+                  <input
+                    type="text"
+                    value={person.name}
+                    onChange={(e) => update({ name: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Spol
+                  {renderPersonDropdown({
+                    keyName: "gender",
+                    value: String(person.gender || "M"),
+                    options: [
+                      { value: "M", label: "Muško" },
+                      { value: "F", label: "Žensko" },
+                    ],
+                    onSelect: (nextGender) => update({ gender: String(nextGender) }),
+                    ariaLabel: "Spol",
+                  })}
+                </label>
+                <label>
+                  Godina rođenja
+                  <input
+                    type="text"
+                    value={person.birthYear}
+                    onChange={(e) => update({ birthYear: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Godina smrti (opciono)
+                  <input
+                    type="text"
+                    value={person.deathYear}
+                    onChange={(e) => update({ deathYear: e.target.value })}
+                  />
+                </label>
+              </div>
+              {photoEditorOpen && safePersonPhoto && (
+                <div className="photo-editor-popover person-hero-photo-editor">
+                  <label className="photo-upload-inline">
+                    <Upload className="w-4 h-4" />
+                    Zamijeni fotografiju
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handlePhotoUpload(e.target.files && e.target.files[0])}
+                    />
+                  </label>
+                  <label className="photo-control">
+                    Zoom
+                    <input
+                      type="range"
+                      min="1"
+                      max="3"
+                      step="0.01"
+                      value={photoFrame.zoom}
+                      onChange={(e) =>
+                        handleFrameChange({
+                          ...photoFrame,
+                          zoom: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="photo-control">
+                    Pomak X
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={photoFrame.offsetX}
+                      onChange={(e) =>
+                        handleFrameChange({
+                          ...photoFrame,
+                          offsetX: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="photo-control">
+                    Pomak Y
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      value={photoFrame.offsetY}
+                      onChange={(e) =>
+                        handleFrameChange({
+                          ...photoFrame,
+                          offsetY: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="modal-row person-core-row legacy-top-fields">
             <label>
               Ime
               <input
@@ -343,7 +550,7 @@ const PersonModal = ({
             </label>
           </div>
 
-          <div className="modal-row person-core-row">
+          <div className="modal-row person-core-row legacy-top-fields">
             <label>
               Godina smrti (opciono)
               <input
@@ -370,6 +577,28 @@ const PersonModal = ({
                 type="text"
                 value={person.birthPlace || ""}
                 onChange={(e) => update({ birthPlace: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="modal-row">
+            <label>
+              Odsjek / stepen (opciono)
+              <input
+                type="text"
+                value={person.studies || ""}
+                onChange={(e) => update({ studies: e.target.value })}
+                placeholder="Npr. Racunarstvo (Bachelor / Master / PhD)"
+              />
+            </label>
+
+            <label>
+              Fakultet (opciono)
+              <input
+                type="text"
+                value={person.faculty || ""}
+                onChange={(e) => update({ faculty: e.target.value })}
+                placeholder="Npr. ETF Sarajevo"
               />
             </label>
           </div>
@@ -430,14 +659,11 @@ const PersonModal = ({
                 ],
                 onSelect: (nextSpouse) => {
                   const spouseId = parseInt(nextSpouse, 10);
-                  update({
-                    spouse: spouseId,
-                    divorced: spouseId ? person.divorced || 0 : 0,
-                  });
+                  update({ spouse: spouseId });
                 },
-                ariaLabel: "Supružnik",
+                ariaLabel: "Bracni partner",
               })}
-              <div className="inline-check">
+              <div className="inline-check legacy-divorced-toggle">
                 <input
                   type="checkbox"
                   checked={Boolean(person.divorced)}
@@ -596,7 +822,7 @@ const PersonModal = ({
             </div>
           </div>
 
-          <div className="modal-row modal-row-single">
+          <div className="modal-row modal-row-single legacy-photo-block">
             <label>
               Dodaj fotografiju (opciono)
               <div className="photo-picker-row">
@@ -616,7 +842,7 @@ const PersonModal = ({
                     }}
                   />
                 </label>
-                {Boolean(person.photo) && (
+                {Boolean(safePersonPhoto) && (
                   <button
                     type="button"
                     className="btn-danger small photo-remove-btn"
@@ -624,6 +850,7 @@ const PersonModal = ({
                       setPhotoEditorOpen(false);
                       setPhotoSource("");
                       setPhotoFileName("");
+                      setPhotoDirty(true);
                       setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
                       update({ photo: "" });
                     }}
@@ -636,11 +863,11 @@ const PersonModal = ({
             </label>
           </div>
 
-          {person.photo && (
-            <div className="photo-preview">
+          {safePersonPhoto && (
+            <div className="photo-preview legacy-photo-preview">
               <div className="photo-frame-shell">
                 <div className="photo-frame-preview">
-                  <img src={person.photo} alt={person.name || "Pregled"} />
+                  <img src={safePersonPhoto} alt={person.name || "Pregled"} />
                 </div>
                 <button
                   type="button"
@@ -666,7 +893,7 @@ const PersonModal = ({
                     />
                   </label>
 
-                  <label>
+                  <label className="photo-control">
                     Zoom
                     <input
                       type="range"
@@ -682,7 +909,7 @@ const PersonModal = ({
                       }
                     />
                   </label>
-                  <label>
+                  <label className="photo-control">
                     Pomak X
                     <input
                       type="range"
@@ -697,7 +924,7 @@ const PersonModal = ({
                       }
                     />
                   </label>
-                  <label>
+                  <label className="photo-control">
                     Pomak Y
                     <input
                       type="range"
@@ -719,6 +946,7 @@ const PersonModal = ({
                     onClick={() => {
                       setPhotoEditorOpen(false);
                       setPhotoSource("");
+                      setPhotoDirty(true);
                       setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
                       update({ photo: "" });
                     }}
@@ -753,11 +981,12 @@ const PersonModal = ({
                   window.alert(validationError);
                   return;
                 }
-                const preparedPhoto = person.photo
-                  ? await buildCircularPhoto(photoSource || person.photo, photoFrame)
-                  : "";
+                const shouldRebuildPhoto = Boolean(safePersonPhoto) && Boolean(photoSource) && photoDirty;
+                const preparedPhoto = shouldRebuildPhoto
+                  ? await buildCircularPhoto(photoSource, photoFrame)
+                  : safePersonPhoto;
                 onSave({
-                  person: { ...person, photo: preparedPhoto || person.photo || "" },
+                  person: { ...person, photo: preparedPhoto || "" },
                   tagIds: tagSelections,
                   health: healthDraft,
                 });
@@ -775,6 +1004,8 @@ const PersonModal = ({
 };
 
 export default PersonModal;
+
+
 
 
 
