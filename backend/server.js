@@ -1,6 +1,16 @@
 const express = require("express");
-const cors = require("cors");
 const { init, all, get, run } = require("./db");
+const { applySecurity } = require("./middleware/security");
+const {
+  parseId,
+  clampPercent,
+  buildChildrenMap,
+  hasPath,
+  sanitizeRelationship,
+  normalizeImportPersonRef,
+  normalizeImportStatus,
+  validateImportPayload,
+} = require("./lib/server-utils");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -12,16 +22,7 @@ const RELATIONSHIP_STATUSES = new Set([
   "widowed",
 ]);
 
-app.use(cors());
-app.use(express.json({ limit: "80mb" }));
-app.use((err, req, res, next) => {
-  if (err && err.type === "entity.too.large") {
-    return res.status(413).json({
-      error: "Upload je prevelik. Smanji veličinu ili broj slika u galeriji.",
-    });
-  }
-  return next(err);
-});
+applySecurity(app);
 
 const sanitizePerson = (person) => {
   const cleaned = { ...person };
@@ -31,6 +32,9 @@ const sanitizePerson = (person) => {
   cleaned.divorced = cleaned.divorced ? 1 : 0;
   cleaned.isPinned = cleaned.isPinned ? 1 : 0;
   cleaned.pinColor = cleaned.pinColor || "#f59e0b";
+  cleaned.birthPlace = String(cleaned.birthPlace || "").trim();
+  cleaned.occupation = String(cleaned.occupation || "").trim();
+  cleaned.burialPlace = String(cleaned.burialPlace || "").trim();
   if (cleaned.parent === cleaned.id) cleaned.parent = 0;
   if (cleaned.parent2 === cleaned.id) cleaned.parent2 = 0;
   if (cleaned.parent2 && cleaned.parent2 === cleaned.parent) cleaned.parent2 = 0;
@@ -39,72 +43,22 @@ const sanitizePerson = (person) => {
   return cleaned;
 };
 
-const parseId = (value) => {
-  const parsed = Number(value || 0);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
-};
-
-const clampPercent = (value) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 50;
-  return Math.max(0, Math.min(100, parsed));
-};
-
-const buildChildrenMap = (rows, overrides = new Map()) => {
-  const map = new Map();
-  const addChild = (parentId, childId) => {
-    if (!parentId || !childId) return;
-    const list = map.get(parentId) || [];
-    list.push(childId);
-    map.set(parentId, list);
-  };
-
-  rows.forEach((row) => {
-    const override = overrides.get(row.id);
-    const parent = override ? override.parent : parseId(row.parent);
-    const parent2 = override ? override.parent2 : parseId(row.parent2);
-    addChild(parent, row.id);
-    addChild(parent2, row.id);
-  });
-
-  return map;
-};
-
-const hasPath = (childrenMap, startId, targetId) => {
-  if (!startId || !targetId) return false;
-  const queue = [startId];
-  const visited = new Set();
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (current === targetId) return true;
-    if (visited.has(current)) continue;
-    visited.add(current);
-    const children = childrenMap.get(current) || [];
-    children.forEach((childId) => {
-      if (!visited.has(childId)) queue.push(childId);
-    });
-  }
-
-  return false;
-};
-
 const validatePersonPayload = async ({ id = 0, familyId, parent = 0, parent2 = 0, spouse = 0 }) => {
   const personId = parseId(id);
   const p1 = parseId(parent);
   const p2 = parseId(parent2);
   const spouseId = parseId(spouse);
 
-  if (personId && p1 === personId) return "Roditelj 1 ne može biti ista osoba.";
-  if (personId && p2 === personId) return "Roditelj 2 ne može biti ista osoba.";
-  if (p1 && p2 && p1 === p2) return "Roditelj 1 i Roditelj 2 moraju biti različite osobe.";
+  if (personId && p1 === personId) return "Otac ne može biti ista osoba.";
+  if (personId && p2 === personId) return "Majka ne može biti ista osoba.";
+  if (p1 && p2 && p1 === p2) return "Otac i majka moraju biti različite osobe.";
   if (personId && spouseId === personId) return "Supružnik ne može biti ista osoba.";
 
   const people = await all("SELECT id, parent, parent2 FROM people WHERE family_id = ?", [familyId]);
   const idSet = new Set(people.map((row) => row.id));
 
-  if (p1 && !idSet.has(p1)) return "Roditelj 1 ne postoji u aktivnoj porodici.";
-  if (p2 && !idSet.has(p2)) return "Roditelj 2 ne postoji u aktivnoj porodici.";
+  if (p1 && !idSet.has(p1)) return "Otac ne postoji u aktivnoj porodici.";
+  if (p2 && !idSet.has(p2)) return "Majka ne postoji u aktivnoj porodici.";
   if (spouseId && !idSet.has(spouseId)) return "Supružnik ne postoji u aktivnoj porodici.";
 
   if (!personId || !idSet.has(personId)) return null;
@@ -113,149 +67,13 @@ const validatePersonPayload = async ({ id = 0, familyId, parent = 0, parent2 = 0
   const childrenMap = buildChildrenMap(people, overrides);
 
   if (p1 && hasPath(childrenMap, personId, p1)) {
-    return "Neispravna veza: Roditelj 1 je potomak ove osobe (ciklus).";
+    return "Neispravna veza: Otac je potomak ove osobe (ciklus).";
   }
   if (p2 && hasPath(childrenMap, personId, p2)) {
-    return "Neispravna veza: Roditelj 2 je potomak ove osobe (ciklus).";
+    return "Neispravna veza: Majka je potomak ove osobe (ciklus).";
   }
 
   return null;
-};
-
-const sanitizeRelationship = (row) => ({
-  id: row.id,
-  familyId: row.familyId,
-  person1Id: row.person1Id,
-  person2Id: row.person2Id,
-  status: row.status,
-  startDate: row.startDate || "",
-  endDate: row.endDate || "",
-  notes: row.notes || "",
-  isCurrent: row.isCurrent ? 1 : 0,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-});
-
-const normalizeImportPersonRef = (value) => {
-  const parsed = Number(value || 0);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
-};
-
-const normalizeImportStatus = (value) => {
-  const status = String(value || "partner").trim().toLowerCase();
-  return RELATIONSHIP_STATUSES.has(status) ? status : "";
-};
-
-const validateImportPayload = (payload) => {
-  if (!payload || typeof payload !== "object") return "Import payload mora biti objekat.";
-  const schemaVersion = String(payload.schemaVersion || "");
-  if (!schemaVersion.startsWith("2")) return "Podrzana je samo schemaVersion 2.x.";
-  if (!Array.isArray(payload.people)) return "`people` mora biti niz.";
-  if (!Array.isArray(payload.tags || [])) return "`tags` mora biti niz.";
-  if (!Array.isArray(payload.tagLinks || [])) return "`tagLinks` mora biti niz.";
-  if (!Array.isArray(payload.relationships || [])) return "`relationships` mora biti niz.";
-  if (payload.familyHealth && typeof payload.familyHealth !== "object") {
-    return "`familyHealth` mora biti objekat.";
-  }
-  if (!Array.isArray(payload.personHealth || [])) return "`personHealth` mora biti niz.";
-
-  const people = payload.people;
-  const personIds = new Set();
-  for (let i = 0; i < people.length; i += 1) {
-    const row = people[i];
-    const rowIndex = i + 1;
-    const personId = normalizeImportPersonRef(row?.id);
-    if (!personId) return `people[${rowIndex}] mora imati validan numericki id.`;
-    if (personIds.has(personId)) return `Duplirani person id u people: ${personId}.`;
-    if (!String(row?.name || "").trim()) return `people[${rowIndex}] nema ime.`;
-    personIds.add(personId);
-  }
-
-  const childrenByParent = new Map();
-  const addChild = (parentId, childId) => {
-    if (!parentId || !childId) return;
-    const list = childrenByParent.get(parentId) || [];
-    list.push(childId);
-    childrenByParent.set(parentId, list);
-  };
-
-  for (let i = 0; i < people.length; i += 1) {
-    const row = people[i];
-    const personId = normalizeImportPersonRef(row.id);
-    const parent = normalizeImportPersonRef(row.parent);
-    const parent2 = normalizeImportPersonRef(row.parent2);
-    const spouse = normalizeImportPersonRef(row.spouse);
-    const rowIndex = i + 1;
-
-    if (parent && !personIds.has(parent)) return `people[${rowIndex}] ima nepostojeci parent id (${parent}).`;
-    if (parent2 && !personIds.has(parent2)) return `people[${rowIndex}] ima nepostojeci parent2 id (${parent2}).`;
-    if (spouse && !personIds.has(spouse)) return `people[${rowIndex}] ima nepostojeci spouse id (${spouse}).`;
-    if (parent && parent === personId) return `people[${rowIndex}] ima self-parent gresku.`;
-    if (parent2 && parent2 === personId) return `people[${rowIndex}] ima self-parent2 gresku.`;
-    if (parent && parent2 && parent === parent2) return `people[${rowIndex}] ima duplog roditelja.`;
-    addChild(parent, personId);
-    addChild(parent2, personId);
-  }
-
-  for (const personId of personIds) {
-    const directChildren = childrenByParent.get(personId) || [];
-    for (const childId of directChildren) {
-      if (hasPath(childrenByParent, childId, personId)) {
-        return `Otkriven ciklus u roditeljskim vezama za osobu ${personId}.`;
-      }
-    }
-  }
-
-  const tags = payload.tags || [];
-  const tagIds = new Set();
-  for (let i = 0; i < tags.length; i += 1) {
-    const row = tags[i];
-    const rowIndex = i + 1;
-    const tagId = normalizeImportPersonRef(row?.id);
-    if (!tagId) return `tags[${rowIndex}] mora imati validan numericki id.`;
-    if (tagIds.has(tagId)) return `Duplirani tag id u tags: ${tagId}.`;
-    if (!String(row?.name || "").trim()) return `tags[${rowIndex}] nema naziv.`;
-    tagIds.add(tagId);
-  }
-
-  const tagLinks = payload.tagLinks || [];
-  for (let i = 0; i < tagLinks.length; i += 1) {
-    const row = tagLinks[i];
-    const rowIndex = i + 1;
-    const personId = normalizeImportPersonRef(row?.personId);
-    const tagId = normalizeImportPersonRef(row?.tagId);
-    if (!personIds.has(personId)) return `tagLinks[${rowIndex}] ima nepostojeci personId (${personId}).`;
-    if (!tagIds.has(tagId)) return `tagLinks[${rowIndex}] ima nepostojeci tagId (${tagId}).`;
-  }
-
-  const relationships = payload.relationships || [];
-  for (let i = 0; i < relationships.length; i += 1) {
-    const row = relationships[i];
-    const rowIndex = i + 1;
-    const p1 = normalizeImportPersonRef(row?.person1Id);
-    const p2 = normalizeImportPersonRef(row?.person2Id);
-    if (!personIds.has(p1)) return `relationships[${rowIndex}] ima nepostojeci person1Id (${p1}).`;
-    if (!personIds.has(p2)) return `relationships[${rowIndex}] ima nepostojeci person2Id (${p2}).`;
-    if (p1 === p2) return `relationships[${rowIndex}] mora imati dvije razlicite osobe.`;
-    if (!normalizeImportStatus(row?.status)) return `relationships[${rowIndex}] ima neispravan status.`;
-  }
-
-  const personHealth = payload.personHealth || [];
-  const personHealthIds = new Set();
-  for (let i = 0; i < personHealth.length; i += 1) {
-    const row = personHealth[i];
-    const rowIndex = i + 1;
-    const personId = normalizeImportPersonRef(row?.personId);
-    if (!personIds.has(personId)) {
-      return `personHealth[${rowIndex}] ima nepostojeci personId (${personId}).`;
-    }
-    if (personHealthIds.has(personId)) {
-      return `personHealth[${rowIndex}] duplira personId (${personId}).`;
-    }
-    personHealthIds.add(personId);
-  }
-
-  return "";
 };
 
 app.get("/api/health", (req, res) => {
@@ -318,7 +136,7 @@ app.get("/api/people", async (req, res) => {
     const { familyId } = req.query;
     const params = [];
     let sql =
-      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor FROM people";
+      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, birth_place as birthPlace, occupation, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor FROM people";
 
     if (familyId) {
       sql += " WHERE family_id = ?";
@@ -342,6 +160,9 @@ app.post("/api/people", async (req, res) => {
       gender = "M",
       birthYear = "",
       deathYear = "",
+      birthPlace = "",
+      occupation = "",
+      burialPlace = "",
       photo = "",
       bio = "",
       parent = 0,
@@ -368,14 +189,17 @@ app.post("/api/people", async (req, res) => {
 
     const result = await run(
       `INSERT INTO people
-        (family_id, name, gender, birth_year, death_year, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (family_id, name, gender, birth_year, death_year, birth_place, occupation, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       , [
         familyId,
         name,
         gender,
         birthYear,
         deathYear,
+        birthPlace,
+        occupation,
+        burialPlace,
         photo,
         bio,
         parentId,
@@ -389,7 +213,7 @@ app.post("/api/people", async (req, res) => {
 
     const person = await get(
       `SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear,
-        photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
+        birth_place as birthPlace, occupation, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
         FROM people WHERE id = ?`,
       [result.lastID]
     );
@@ -409,6 +233,9 @@ app.put("/api/people/:id", async (req, res) => {
       gender = "M",
       birthYear = "",
       deathYear = "",
+      birthPlace = "",
+      occupation = "",
+      burialPlace = "",
       photo = "",
       bio = "",
       parent = 0,
@@ -437,7 +264,7 @@ app.put("/api/people/:id", async (req, res) => {
 
     await run(
       `UPDATE people
-        SET family_id = ?, name = ?, gender = ?, birth_year = ?, death_year = ?, photo = ?, bio = ?, parent = ?, parent2 = ?, spouse = ?, divorced = ?, is_pinned = ?, pin_color = ?
+        SET family_id = ?, name = ?, gender = ?, birth_year = ?, death_year = ?, birth_place = ?, occupation = ?, burial_place = ?, photo = ?, bio = ?, parent = ?, parent2 = ?, spouse = ?, divorced = ?, is_pinned = ?, pin_color = ?
         WHERE id = ?`,
       [
         familyId,
@@ -445,6 +272,9 @@ app.put("/api/people/:id", async (req, res) => {
         gender,
         birthYear,
         deathYear,
+        birthPlace,
+        occupation,
+        burialPlace,
         photo,
         bio,
         parentId,
@@ -459,7 +289,7 @@ app.put("/api/people/:id", async (req, res) => {
 
     const person = await get(
       `SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear,
-        photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
+        birth_place as birthPlace, occupation, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
         FROM people WHERE id = ?`,
       [id]
     );
@@ -840,7 +670,7 @@ app.get("/api/gallery/photos", async (req, res) => {
     if (!familyId) return res.status(400).json({ error: "familyId je obavezan." });
 
     const photos = await all(
-      "SELECT id, family_id as familyId, src, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
+      "SELECT id, family_id as familyId, src, description, location, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
       [familyId]
     );
     if (photos.length === 0) return res.json([]);
@@ -871,6 +701,8 @@ app.get("/api/gallery/photos", async (req, res) => {
         id: photo.id,
         familyId: photo.familyId,
         src: photo.src,
+        description: String(photo.description || ""),
+        location: String(photo.location || ""),
         createdAt: photo.createdAt,
         tags: tagsByPhoto.get(photo.id) || [],
       }))
@@ -886,6 +718,8 @@ app.post("/api/gallery/photo", async (req, res) => {
     const rawPhoto = req.body?.photo || {};
     const incomingPhotoId = parseId(rawPhoto?.id);
     const src = String(rawPhoto?.src || "").trim();
+    const description = String(rawPhoto?.description || "").trim();
+    const location = String(rawPhoto?.location || "").trim();
     const tags = Array.isArray(rawPhoto?.tags) ? rawPhoto.tags : [];
 
     if (!familyId) return res.status(400).json({ error: "familyId je obavezan." });
@@ -908,12 +742,12 @@ app.post("/api/gallery/photo", async (req, res) => {
       if (!existing) {
         return res.status(404).json({ error: "Fotografija nije pronađena u porodici." });
       }
-      await run("UPDATE gallery_photos SET src = ? WHERE id = ?", [src, photoId]);
+      await run("UPDATE gallery_photos SET src = ?, description = ?, location = ? WHERE id = ?", [src, description, location, photoId]);
       await run("DELETE FROM gallery_photo_tags WHERE photo_id = ?", [photoId]);
     } else {
       const insertResult = await run(
-        "INSERT INTO gallery_photos (family_id, src) VALUES (?, ?)",
-        [familyId, src]
+        "INSERT INTO gallery_photos (family_id, src, description, location) VALUES (?, ?, ?, ?)",
+        [familyId, src, description, location]
       );
       photoId = insertResult.lastID;
     }
@@ -928,7 +762,7 @@ app.post("/api/gallery/photo", async (req, res) => {
     }
 
     const photo = await get(
-      "SELECT id, family_id as familyId, src, created_at as createdAt FROM gallery_photos WHERE id = ?",
+      "SELECT id, family_id as familyId, src, description, location, created_at as createdAt FROM gallery_photos WHERE id = ?",
       [photoId]
     );
     const photoTags = await all(
@@ -941,6 +775,8 @@ app.post("/api/gallery/photo", async (req, res) => {
       id: photo.id,
       familyId: photo.familyId,
       src: photo.src,
+      description: String(photo.description || ""),
+      location: String(photo.location || ""),
       createdAt: photo.createdAt,
       tags: photoTags.map((tag) => ({
         id: tag.id,
@@ -977,10 +813,12 @@ app.put("/api/gallery/photos", async (req, res) => {
 
     for (const rawPhoto of photos) {
       const src = String(rawPhoto?.src || "").trim();
+      const description = String(rawPhoto?.description || "").trim();
+      const location = String(rawPhoto?.location || "").trim();
       if (!src) continue;
       const photoResult = await run(
-        "INSERT INTO gallery_photos (family_id, src) VALUES (?, ?)",
-        [familyId, src]
+        "INSERT INTO gallery_photos (family_id, src, description, location) VALUES (?, ?, ?, ?)",
+        [familyId, src, description, location]
       );
       const photoId = photoResult.lastID;
       const tags = Array.isArray(rawPhoto?.tags) ? rawPhoto.tags : [];
@@ -996,7 +834,7 @@ app.put("/api/gallery/photos", async (req, res) => {
     await run("COMMIT");
 
     const savedPhotos = await all(
-      "SELECT id, family_id as familyId, src, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
+      "SELECT id, family_id as familyId, src, description, location, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
       [familyId]
     );
     if (savedPhotos.length === 0) return res.json([]);
@@ -1026,6 +864,8 @@ app.put("/api/gallery/photos", async (req, res) => {
         id: photo.id,
         familyId: photo.familyId,
         src: photo.src,
+        description: String(photo.description || ""),
+        location: String(photo.location || ""),
         createdAt: photo.createdAt,
         tags: tagsByPhoto.get(photo.id) || [],
       }))
@@ -1068,7 +908,7 @@ app.get("/api/families/:familyId/gallery", async (req, res) => {
     if (!familyId) return res.status(400).json({ error: "familyId je obavezan." });
 
     const photos = await all(
-      "SELECT id, family_id as familyId, src, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
+      "SELECT id, family_id as familyId, src, description, location, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
       [familyId]
     );
     if (photos.length === 0) return res.json([]);
@@ -1099,6 +939,8 @@ app.get("/api/families/:familyId/gallery", async (req, res) => {
         id: photo.id,
         familyId: photo.familyId,
         src: photo.src,
+        description: String(photo.description || ""),
+        location: String(photo.location || ""),
         createdAt: photo.createdAt,
         tags: tagsByPhoto.get(photo.id) || [],
       }))
@@ -1130,10 +972,12 @@ app.put("/api/families/:familyId/gallery", async (req, res) => {
 
     for (const rawPhoto of photos) {
       const src = String(rawPhoto?.src || "").trim();
+      const description = String(rawPhoto?.description || "").trim();
+      const location = String(rawPhoto?.location || "").trim();
       if (!src) continue;
       const photoResult = await run(
-        "INSERT INTO gallery_photos (family_id, src) VALUES (?, ?)",
-        [familyId, src]
+        "INSERT INTO gallery_photos (family_id, src, description, location) VALUES (?, ?, ?, ?)",
+        [familyId, src, description, location]
       );
       const photoId = photoResult.lastID;
       const tags = Array.isArray(rawPhoto?.tags) ? rawPhoto.tags : [];
@@ -1149,7 +993,7 @@ app.put("/api/families/:familyId/gallery", async (req, res) => {
     await run("COMMIT");
 
     const savedPhotos = await all(
-      "SELECT id, family_id as familyId, src, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
+      "SELECT id, family_id as familyId, src, description, location, created_at as createdAt FROM gallery_photos WHERE family_id = ? ORDER BY id DESC",
       [familyId]
     );
     if (savedPhotos.length === 0) return res.json([]);
@@ -1179,6 +1023,8 @@ app.put("/api/families/:familyId/gallery", async (req, res) => {
         id: photo.id,
         familyId: photo.familyId,
         src: photo.src,
+        description: String(photo.description || ""),
+        location: String(photo.location || ""),
         createdAt: photo.createdAt,
         tags: tagsByPhoto.get(photo.id) || [],
       }))
@@ -1205,14 +1051,17 @@ app.post("/api/people/import", async (req, res) => {
       if (!person.name) continue;
       const result = await run(
         `INSERT INTO people
-          (family_id, name, gender, birth_year, death_year, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          (family_id, name, gender, birth_year, death_year, birth_place, occupation, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         , [
           familyId,
           person.name,
           person.gender || "M",
           person.birthYear || "",
           person.deathYear || "",
+          person.birthPlace || "",
+          person.occupation || "",
+          person.burialPlace || "",
           person.photo || "",
           person.bio || "",
           person.parent || 0,
@@ -1228,7 +1077,7 @@ app.post("/api/people/import", async (req, res) => {
 
     const rows = await all(
       `SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear,
-        photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
+        birth_place as birthPlace, occupation, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
         FROM people WHERE family_id = ? ORDER BY id ASC`,
       [familyId]
     );
@@ -1251,7 +1100,7 @@ app.get("/api/export", async (req, res) => {
     if (!family) return res.status(404).json({ error: "Porodica nije pronađena." });
 
     const people = await all(
-      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor, created_at as createdAt FROM people WHERE family_id = ? ORDER BY id ASC",
+      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, birth_place as birthPlace, occupation, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor, created_at as createdAt FROM people WHERE family_id = ? ORDER BY id ASC",
       [familyId]
     );
     const tags = await all(
@@ -1297,7 +1146,7 @@ app.post("/api/import/v2", async (req, res) => {
   const payload = req.body?.payload;
   if (!familyId) return res.status(400).json({ error: "familyId je obavezan." });
 
-  const validationError = validateImportPayload(payload);
+  const validationError = validateImportPayload(payload, RELATIONSHIP_STATUSES);
   if (validationError) return res.status(400).json({ error: validationError });
 
   try {
@@ -1316,14 +1165,17 @@ app.post("/api/import/v2", async (req, res) => {
     for (const row of people) {
       const result = await run(
         `INSERT INTO people
-          (family_id, name, gender, birth_year, death_year, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
+          (family_id, name, gender, birth_year, death_year, birth_place, occupation, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
         [
           familyId,
           row.name,
           row.gender || "M",
           row.birthYear || "",
           row.deathYear || "",
+          row.birthPlace || "",
+          row.occupation || "",
+          row.burialPlace || "",
           row.photo || "",
           row.bio || "",
           row.divorced ? 1 : 0,
@@ -1380,7 +1232,7 @@ app.post("/api/import/v2", async (req, res) => {
           familyId,
           firstId,
           secondId,
-          normalizeImportStatus(row.status) || "partner",
+          normalizeImportStatus(row.status, RELATIONSHIP_STATUSES) || "partner",
           row.startDate || "",
           row.endDate || "",
           row.notes || "",
@@ -1454,3 +1306,4 @@ init()
     console.error("Failed to init DB", err);
     process.exit(1);
   });
+

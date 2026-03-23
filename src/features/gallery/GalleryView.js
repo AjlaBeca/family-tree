@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Layers, Plus, Trash2, X, Download, ArrowLeft } from "lucide-react";
+import { Layers, Plus, Trash2, X, Download, ArrowLeft, Users, ChevronDown } from "lucide-react";
 import { api, getApiErrorMessage } from "../../services/api";
 
 const readFileAsDataUrl = (file) =>
@@ -13,6 +13,8 @@ const readFileAsDataUrl = (file) =>
 const createPhoto = (src) => ({
   id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
   src,
+  description: "",
+  location: "",
   tags: [],
   createdAt: Date.now(),
 });
@@ -55,6 +57,8 @@ const normalizeGalleryRows = (rows) => {
         id: row?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         familyId: row?.familyId || 0,
         src,
+        description: String(row?.description || ""),
+        location: String(row?.location || ""),
         createdAt: row?.createdAt || Date.now(),
         tags,
       };
@@ -84,7 +88,13 @@ const GalleryView = ({
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
   const [isGalleryLoading, setIsGalleryLoading] = useState(false);
+  const [showPeopleSidebar, setShowPeopleSidebar] = useState(false);
+  const [gridQuery, setGridQuery] = useState("");
+  const [gridSort, setGridSort] = useState("newest");
+  const [gridTaggedOnly, setGridTaggedOnly] = useState(false);
   const dragMovedRef = useRef(false);
+  const dropdownRootRef = useRef(null);
+  const [openDropdown, setOpenDropdown] = useState("");
 
   const loadGalleryRows = async (familyId) => {
     try {
@@ -142,14 +152,41 @@ const GalleryView = ({
     setDirtyPhotoIds([]);
     setDeletedPhotoIds([]);
     setSaveMessage("");
+    setShowPeopleSidebar(false);
+    setGridQuery("");
+    setGridSort("newest");
+    setGridTaggedOnly(false);
+    setOpenDropdown("");
   }, [activeFamilyId]);
 
-  const peopleList = useMemo(() => {
-    const list = Array.isArray(people) ? people : [];
-    return pinnedOnly ? list.filter((p) => p.isPinned) : list;
-  }, [people, pinnedOnly]);
+  useEffect(() => {
+    const onDocumentPointerDown = (event) => {
+      if (!dropdownRootRef.current?.contains(event.target)) {
+        setOpenDropdown("");
+      }
+    };
+    const onDocumentKeyDown = (event) => {
+      if (event.key === "Escape") setOpenDropdown("");
+    };
+    document.addEventListener("pointerdown", onDocumentPointerDown);
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
+      document.removeEventListener("keydown", onDocumentKeyDown);
+    };
+  }, []);
 
-  const personById = useMemo(() => new Map(peopleList.map((p) => [p.id, p])), [peopleList]);
+  const allPeople = useMemo(() => (Array.isArray(people) ? people : []), [people]);
+
+  const peopleList = useMemo(
+    () => (pinnedOnly ? allPeople.filter((p) => p.isPinned) : allPeople),
+    [allPeople, pinnedOnly]
+  );
+
+  const personById = useMemo(
+    () => new Map(allPeople.map((p) => [Number(p.id), p])),
+    [allPeople]
+  );
 
   useEffect(() => {
     if (album.length === 0) {
@@ -181,9 +218,51 @@ const GalleryView = ({
 
   const taggablePeople = useMemo(() => {
     const q = tagSearch.trim().toLowerCase();
-    if (!q) return peopleList;
-    return peopleList.filter((p) => String(p.name || "").toLowerCase().includes(q));
-  }, [peopleList, tagSearch]);
+    if (!q) return allPeople;
+    return allPeople.filter((p) => String(p.name || "").toLowerCase().includes(q));
+  }, [allPeople, tagSearch]);
+
+  const taggedPhotosCount = useMemo(
+    () => album.filter((photo) => Array.isArray(photo.tags) && photo.tags.length > 0).length,
+    [album]
+  );
+
+  const selectedFamilyLabel = useMemo(() => {
+    const selected = (families || []).find((family) => Number(family.id) === Number(activeFamilyId));
+    return selected?.name || "Bez porodice";
+  }, [families, activeFamilyId]);
+
+  const selectedSortLabel = useMemo(() => {
+    if (gridSort === "oldest") return "Sort: najstarije";
+    if (gridSort === "mostTagged") return "Sort: najvise tagova";
+    return "Sort: najnovije";
+  }, [gridSort]);
+
+  const gridAlbum = useMemo(() => {
+    const q = String(gridQuery || "").trim().toLowerCase();
+    let next = Array.isArray(album) ? [...album] : [];
+
+    next = next.filter((photo) => {
+      if (gridTaggedOnly && (!Array.isArray(photo.tags) || photo.tags.length === 0)) return false;
+      if (!q) return true;
+      const description = String(photo.description || "").toLowerCase();
+      const location = String(photo.location || "").toLowerCase();
+      const taggedNames = (photo.tags || [])
+        .map((tag) => String(personById.get(Number(tag.personId || 0))?.name || "").toLowerCase())
+        .join(" ");
+      return description.includes(q) || location.includes(q) || taggedNames.includes(q);
+    });
+
+    if (gridSort === "oldest") {
+      next.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+    } else if (gridSort === "mostTagged") {
+      next.sort((a, b) => (b.tags?.length || 0) - (a.tags?.length || 0));
+    } else {
+      next.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    }
+
+    return next;
+  }, [album, gridQuery, gridSort, gridTaggedOnly, personById]);
 
   const openPhotoEditor = (photoId) => {
     if (!photoId) return;
@@ -194,7 +273,19 @@ const GalleryView = ({
     setTagSearch("");
     setSaveMessage("");
     setSaveError("");
+    setShowPeopleSidebar(false);
   };
+
+  useEffect(() => {
+    if (viewMode !== "editor") return;
+    if (!gridAlbum.length) {
+      setSelectedPhotoId("");
+      return;
+    }
+    if (!selectedPhotoId || !gridAlbum.some((photo) => photo.id === selectedPhotoId)) {
+      setSelectedPhotoId(gridAlbum[0].id);
+    }
+  }, [viewMode, gridAlbum, selectedPhotoId]);
 
   const backToGrid = () => {
     setViewMode("grid");
@@ -273,13 +364,21 @@ const GalleryView = ({
   };
 
   const addTagAtPendingPoint = (personId) => {
-    if (!selectedPhoto || !pendingPoint || !personId) return;
+    const normalizedPersonId = Number(personId);
+    if (
+      !selectedPhoto ||
+      !pendingPoint ||
+      !Number.isInteger(normalizedPersonId) ||
+      normalizedPersonId <= 0
+    ) {
+      return;
+    }
     setAlbum((prev) =>
       prev.map((photo) => {
         if (photo.id !== selectedPhoto.id) return photo;
         const nextTag = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          personId,
+          personId: normalizedPersonId,
           x: pendingPoint.x,
           y: pendingPoint.y,
         };
@@ -361,6 +460,17 @@ const GalleryView = ({
     setPendingPoint({ x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) });
   };
 
+  const updateSelectedPhotoMeta = (field, value) => {
+    if (!selectedPhoto) return;
+    const normalized = String(value || "");
+    setAlbum((prev) =>
+      prev.map((photo) =>
+        photo.id === selectedPhoto.id ? { ...photo, [field]: normalized } : photo
+      )
+    );
+    markPhotoDirty(selectedPhoto.id);
+  };
+
   const saveGallery = async () => {
     if (!activeFamilyId) return;
 
@@ -387,6 +497,8 @@ const GalleryView = ({
       for (const photo of photosToSave) {
         const payload = {
           src: String(photo.src || "").trim(),
+          description: String(photo.description || "").trim(),
+          location: String(photo.location || "").trim(),
           tags: Array.isArray(photo.tags)
             ? photo.tags.map((tag) => ({
                 personId: Number(tag?.personId || 0),
@@ -450,109 +562,189 @@ const GalleryView = ({
     }
   };
 
+  const renderDropdown = ({ keyName, ariaLabel, value, label, options, onSelect, className = "" }) => (
+    <div className={`gallery-dropdown ${className}`.trim()} data-open={openDropdown === keyName ? "1" : "0"}>
+      <button
+        type="button"
+        className="gallery-dropdown-trigger"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={openDropdown === keyName}
+        onClick={() => setOpenDropdown((prev) => (prev === keyName ? "" : keyName))}
+      >
+        <span>{label}</span>
+        <ChevronDown className={`gallery-dropdown-chevron ${openDropdown === keyName ? "is-open" : ""}`} />
+      </button>
+      {openDropdown === keyName && (
+        <div className="gallery-dropdown-menu" role="listbox" aria-label={`${ariaLabel} opcije`}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="option"
+              aria-selected={String(value) === String(option.value)}
+              className={`gallery-dropdown-option ${
+                String(value) === String(option.value) ? "is-selected" : ""
+              }`}
+              onClick={() => {
+                onSelect(option.value);
+                setOpenDropdown("");
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="panel page gallery-instagram-page">
-      <div className="page-header">
-        <div>
-          <h2>Porodična galerija</h2>
-          <p className="muted-text">
-            Galerijske slike su odvojene od profilnih fotografija. Klikni sliku da dodas tag osobe.
-          </p>
-        </div>
-        <div className="family-select compact">
-          <Layers className="w-4 h-4" />
-          <select
-            value={activeFamilyId || ""}
-            onChange={(e) => onFamilyChange(Number(e.target.value))}
-          >
-            {families.map((family) => (
-              <option key={family.id} value={family.id}>
-                {family.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={Boolean(pinnedOnly)}
-            onChange={(e) => onPinnedOnlyChange(e.target.checked)}
-          />
-          <span>Samo pinovani</span>
-        </label>
-      </div>
+    <div className="panel page gallery-instagram-page" ref={dropdownRootRef}>
 
-      <div className="card gallery-top-actions">
-        <div className="gallery-top-actions-left">
-          {saveMessage && <span className="muted-text">{saveMessage}</span>}
-          {saveError && (
-            <span className="muted-text" style={{ color: "#b91c1c" }}>
-              {saveError}
-            </span>
-          )}
+      <div className="gallery-hero">
+        <div className="gallery-hero-copy">
+          <h2>Galerija</h2>
+          <p className="muted-text">Uredi slike i tagove</p>
         </div>
 
-        <div className="gallery-top-actions-right">
-          <label className="btn-icon" title="Dodaj slike" aria-label="Dodaj slike">
-            <Plus className="w-4 h-4" />
+        <div className="gallery-hero-controls">
+          <div className="family-select compact">
+            <Layers className="w-4 h-4" />
+            {renderDropdown({
+              keyName: "family",
+              ariaLabel: "Aktivna porodica",
+              value: String(activeFamilyId || ""),
+              label: selectedFamilyLabel,
+              options: (families || []).map((family) => ({
+                value: String(family.id),
+                label: family.name,
+              })),
+              onSelect: (nextFamilyId) => onFamilyChange(Number(nextFamilyId)),
+              className: "gallery-family-dropdown",
+            })}
+          </div>
+
+          <label className="inline-check">
             <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => handleUpload(e.target.files)}
+              type="checkbox"
+              checked={Boolean(pinnedOnly)}
+              onChange={(e) => onPinnedOnlyChange(e.target.checked)}
             />
+            <span>Samo pinovani</span>
           </label>
 
-          {viewMode === "editor" && (
-            <>
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={() => { void removeSelectedPhoto(); }}
-                disabled={!selectedPhoto}
-                title="Obriši izabranu sliku"
-                aria-label="Obriši izabranu sliku"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+          <div className="gallery-hero-actions no-divider">
+            <label className="btn-icon" title="Dodaj slike" aria-label="Dodaj slike">
+              <Plus className="w-4 h-4" />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => handleUpload(e.target.files)}
+              />
+            </label>
 
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={saveGallery}
-                disabled={!selectedPhoto || (dirtyPhotoIds.length === 0 && deletedPhotoIds.length === 0)}
-                title="Sačuvaj u galeriju"
-                aria-label="Sačuvaj u galeriju"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+            {viewMode === "editor" && (
+              <>
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setShowPeopleSidebar((v) => !v)}
+                  title={showPeopleSidebar ? "Sakrij osobe" : "Prikazi osobe"}
+                  aria-label={showPeopleSidebar ? "Sakrij osobe" : "Prikazi osobe"}
+                >
+                  <Users className="w-4 h-4" />
+                </button>
 
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={backToGrid}
-                title="Nazad na galeriju"
-                aria-label="Nazad na galeriju"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            </>
-          )}
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => { void removeSelectedPhoto(); }}
+                  disabled={!selectedPhoto}
+                  title="Obriši izabranu sliku"
+                  aria-label="Obriši izabranu sliku"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={saveGallery}
+                  disabled={!selectedPhoto || (dirtyPhotoIds.length === 0 && deletedPhotoIds.length === 0)}
+                  title="Sacuvaj u galeriju"
+                  aria-label="Sacuvaj u galeriju"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={backToGrid}
+                  title="Nazad na galeriju"
+                  aria-label="Nazad na galeriju"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
+      </div>
+
+      <div className="gallery-top-meta" role="status" aria-live="polite">
+        <span className="meta-pill">{album.length} slika</span>
+        <span className="meta-pill">{taggedPhotosCount} tagovanih</span>
+        {isGalleryLoading && <span className="meta-pill">Ucitavanje...</span>}
+        {saveMessage && <span className="meta-pill">{saveMessage}</span>}
+        {saveError && <span className="meta-pill meta-pill--error">{saveError}</span>}
       </div>
 
       {isGalleryLoading && <div className="loading">Učitavanje galerije...</div>}
 
       {viewMode === "grid" ? (
         <div className="gallery-grid-screen">
+          <div className="gallery-grid-filters">
+            <input
+              type="text"
+              value={gridQuery}
+              onChange={(e) => setGridQuery(e.target.value)}
+              placeholder="Pretrazi opis, lokaciju ili tag osobe"
+              aria-label="Pretraga galerije"
+            />
+            {renderDropdown({
+              keyName: "gridSort",
+              ariaLabel: "Sortiranje galerije",
+              value: gridSort,
+              label: selectedSortLabel,
+              options: [
+                { value: "newest", label: "Sort: najnovije" },
+                { value: "oldest", label: "Sort: najstarije" },
+                { value: "mostTagged", label: "Sort: najvise tagova" },
+              ],
+              onSelect: setGridSort,
+              className: "gallery-sort-dropdown",
+            })}
+            <label className="inline-check">
+              <input
+                type="checkbox"
+                checked={Boolean(gridTaggedOnly)}
+                onChange={(e) => setGridTaggedOnly(e.target.checked)}
+              />
+              <span>Samo tagovane</span>
+            </label>
+          </div>
+
           {album.length === 0 ? (
             <div className="empty gallery-empty-upload">
-              <p>Galerija je prazna. Dodaj slike da započneš.</p>
+              <p>Galerija je prazna. Dodaj slike da zapocnes.</p>
             </div>
           ) : (
             <div className="gallery-fixed-grid">
-              {album.map((photo) => (
+              {gridAlbum.map((photo) => (
                 <button
                   key={photo.id}
                   type="button"
@@ -560,15 +752,26 @@ const GalleryView = ({
                   onClick={() => openPhotoEditor(photo.id)}
                   title="Otvori i taguj"
                 >
-                  <img src={photo.src} alt="Galerijska fotografija" />
+                  <img
+                    src={photo.src}
+                    alt="Galerijska fotografija"
+                    loading="lazy"
+                    decoding="async"
+                    fetchPriority="low"
+                  />
                 </button>
               ))}
+              {gridAlbum.length === 0 && (
+                <div className="empty gallery-empty-upload">
+                  <p>Nema rezultata za izabrane filtere.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
       ) : (
-        <div className="gallery-instagram-layout">
-          <aside className="gallery-people-sidebar">
+        <div className={`gallery-instagram-layout ${showPeopleSidebar ? "" : "compact-side"}`}>
+          <aside className={`gallery-people-sidebar ${showPeopleSidebar ? "" : "is-hidden"}`}>
             <h3>Osobe</h3>
             <input
               type="text"
@@ -596,9 +799,60 @@ const GalleryView = ({
           </aside>
 
           <section className="gallery-instagram-main">
+            <div className="gallery-grid-filters gallery-grid-filters--editor">
+              <input
+                type="text"
+                value={gridQuery}
+                onChange={(e) => setGridQuery(e.target.value)}
+                placeholder="Pretrazi opis, lokaciju ili tag osobe"
+                aria-label="Pretraga galerije"
+              />
+              {renderDropdown({
+                keyName: "editorSort",
+                ariaLabel: "Sortiranje galerije",
+                value: gridSort,
+                label: selectedSortLabel,
+                options: [
+                  { value: "newest", label: "Sort: najnovije" },
+                  { value: "oldest", label: "Sort: najstarije" },
+                  { value: "mostTagged", label: "Sort: najvise tagova" },
+                ],
+                onSelect: setGridSort,
+                className: "gallery-sort-dropdown",
+              })}
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(gridTaggedOnly)}
+                  onChange={(e) => setGridTaggedOnly(e.target.checked)}
+                />
+                <span>Samo tagovane</span>
+              </label>
+            </div>
+
+            <div className="gallery-editor-strip">
+              {gridAlbum.map((photo) => (
+                <button
+                  key={`strip-${photo.id}`}
+                  type="button"
+                  className={`gallery-strip-tile ${selectedPhotoId === photo.id ? "is-active" : ""}`}
+                  onClick={() => setSelectedPhotoId(photo.id)}
+                  title="Prebaci sliku"
+                >
+                  <img
+                    src={photo.src}
+                    alt="Thumb"
+                    loading="lazy"
+                    decoding="async"
+                    fetchPriority="low"
+                  />
+                </button>
+              ))}
+            </div>
+
             {!selectedPhoto && (
               <div className="empty gallery-empty-upload">
-                <p>Dodaj slike u galeriju za pocetak.</p>
+                <p>Nema rezultata za izabrane filtere.</p>
               </div>
             )}
 
@@ -613,7 +867,14 @@ const GalleryView = ({
                   role="button"
                   tabIndex={0}
                 >
-                  <img src={selectedPhoto.src} alt="Galerijska fotografija" className="gallery-stage-image" />
+                  <img
+                    src={selectedPhoto.src}
+                    alt="Galerijska fotografija"
+                    className="gallery-stage-image"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
+                  />
 
                   {(selectedPhoto.tags || []).map((tag) => {
                     const person = personById.get(tag.personId);
@@ -640,7 +901,7 @@ const GalleryView = ({
                 </div>
 
                 <p className="muted-text">
-                  Klikni na fotografiju da postaviš tačku za tag osobe. Prevuci postoje\u0107i tag da ga pomjeriš.
+                  Klikni na fotografiju da postavis tacku za tag osobe. Prevuci postojeci tag da ga pomjeris.
                 </p>
               </>
             )}
@@ -694,7 +955,7 @@ const GalleryView = ({
                       key={`tag-${person.id}`}
                       type="button"
                       className="gallery-person-btn"
-                      onClick={() => addTagAtPendingPoint(person.id)}
+                      onClick={() => addTagAtPendingPoint(Number(person.id))}
                     >
                       <span>{person.name || "Bez imena"}</span>
                     </button>
@@ -706,6 +967,30 @@ const GalleryView = ({
                 </button>
               </>
             )}
+
+            {selectedPhoto && (
+              <div className="gallery-photo-meta">
+                <h3>Detalji fotografije</h3>
+                <label>
+                  Opis
+                  <textarea
+                    rows={2}
+                    value={String(selectedPhoto.description || "")}
+                    onChange={(e) => updateSelectedPhotoMeta("description", e.target.value)}
+                    placeholder="Npr. Porodicni rucak"
+                  />
+                </label>
+                <label>
+                  Lokacija
+                  <input
+                    type="text"
+                    value={String(selectedPhoto.location || "")}
+                    onChange={(e) => updateSelectedPhotoMeta("location", e.target.value)}
+                    placeholder="Npr. Sarajevo"
+                  />
+                </label>
+              </div>
+            )}
           </aside>
         </div>
       )}
@@ -714,6 +999,8 @@ const GalleryView = ({
 };
 
 export default GalleryView;
+
+
 
 
 

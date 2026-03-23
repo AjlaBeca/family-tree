@@ -51,6 +51,9 @@ const init = async () => {
       gender TEXT DEFAULT 'M',
       birth_year TEXT DEFAULT '',
       death_year TEXT DEFAULT '',
+      birth_place TEXT DEFAULT '',
+      occupation TEXT DEFAULT '',
+      burial_place TEXT DEFAULT '',
       photo TEXT DEFAULT '',
       bio TEXT DEFAULT '',
       parent INTEGER DEFAULT 0,
@@ -141,6 +144,8 @@ const init = async () => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       family_id INTEGER NOT NULL,
       src TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      location TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (family_id) REFERENCES families(id)
     )`
@@ -183,6 +188,21 @@ const init = async () => {
   }
   if (!(await columnExists("people", "pin_color"))) {
     await run("ALTER TABLE people ADD COLUMN pin_color TEXT DEFAULT '#f59e0b'");
+  }
+  if (!(await columnExists("people", "occupation"))) {
+    await run("ALTER TABLE people ADD COLUMN occupation TEXT DEFAULT ''");
+  }
+  if (!(await columnExists("people", "birth_place"))) {
+    await run("ALTER TABLE people ADD COLUMN birth_place TEXT DEFAULT ''");
+  }
+  if (!(await columnExists("people", "burial_place"))) {
+    await run("ALTER TABLE people ADD COLUMN burial_place TEXT DEFAULT ''");
+  }
+  if (!(await columnExists("gallery_photos", "description"))) {
+    await run("ALTER TABLE gallery_photos ADD COLUMN description TEXT DEFAULT ''");
+  }
+  if (!(await columnExists("gallery_photos", "location"))) {
+    await run("ALTER TABLE gallery_photos ADD COLUMN location TEXT DEFAULT ''");
   }
 
   const familyCount = await get("SELECT COUNT(*) as count FROM families");

@@ -155,7 +155,7 @@
 
 .content {
   flex: 1;
-  padding: calc(var(--header-stack) + 8px) 16px 12px;
+  padding: calc(var(--header-stack) + 14px) 16px 12px;
   overflow-y: auto;
   overflow-x: hidden;
 }

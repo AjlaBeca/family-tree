@@ -50,11 +50,6 @@ export const getVisiblePeople = (people, focusPersonId, expandMode, maxDepth) =>
     walkDescendants(focusPersonId, 0);
   }
 
-  Array.from(included).forEach((id) => {
-    const person = byId.get(id);
-    if (person?.spouse) included.add(person.spouse);
-  });
-
   return people.filter((p) => included.has(p.id));
 };
 

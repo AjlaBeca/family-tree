@@ -11,6 +11,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^13.5.0",
+    "gojs": "^3.1.8",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -50,6 +51,3 @@
     "tailwindcss": "^4.1.18"
   }
 }
-
-
-

@@ -1,14 +1,53 @@
-import React, { useMemo } from "react";
-import { Layers } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Layers, ChevronDown, X } from "lucide-react";
+import { api, getApiErrorMessage } from "../../services/api";
 
 const safeYear = (value) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
+const getSurname = (name = "") => {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : "";
+};
+
 const avg = (values) => {
   if (!values.length) return 0;
   return values.reduce((sum, item) => sum + item, 0) / values.length;
+};
+
+const buildCompareStats = (people) => {
+  const list = Array.isArray(people) ? people : [];
+  const now = new Date().getFullYear();
+  const agesLiving = [];
+  const childrenByParent = new Map();
+
+  list.forEach((person) => {
+    const birth = safeYear(person.birthYear);
+    const isDeceased = Boolean(safeYear(person.deathYear));
+    if (birth && !isDeceased) {
+      const age = now - birth;
+      if (age >= 0 && age <= 130) agesLiving.push(age);
+    }
+    const p1 = Number(person.parent || 0);
+    const p2 = Number(person.parent2 || 0);
+    if (p1) childrenByParent.set(p1, (childrenByParent.get(p1) || 0) + 1);
+    if (p2) childrenByParent.set(p2, (childrenByParent.get(p2) || 0) + 1);
+  });
+
+  return {
+    total: list.length,
+    living: list.filter((p) => !p.deathYear).length,
+    deceased: list.filter((p) => Boolean(p.deathYear)).length,
+    pinned: list.filter((p) => Boolean(p.isPinned)).length,
+    withPhoto: list.filter((p) => String(p.photo || "").trim()).length,
+    maxChildren: list.reduce((max, p) => Math.max(max, childrenByParent.get(p.id) || 0), 0),
+    avgLivingAge: avg(agesLiving),
+  };
 };
 
 const StatsView = ({
@@ -19,8 +58,70 @@ const StatsView = ({
   families,
   activeFamilyId,
   onFamilyChange,
-  activeFamily,
+  activeFamily: _activeFamily,
 }) => {
+  const [compareFamilyId, setCompareFamilyId] = useState(0);
+  const [comparePeopleRaw, setComparePeopleRaw] = useState([]);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState("");
+  const [openDropdown, setOpenDropdown] = useState("");
+  const [drilldown, setDrilldown] = useState({ isOpen: false, title: "", people: [] });
+  const dropdownRootRef = useRef(null);
+
+  useEffect(() => {
+    setCompareFamilyId(0);
+    setComparePeopleRaw([]);
+    setCompareError("");
+  }, [activeFamilyId]);
+
+  useEffect(() => {
+    const onDocumentPointerDown = (event) => {
+      if (!dropdownRootRef.current?.contains(event.target)) {
+        setOpenDropdown("");
+      }
+    };
+    const onDocumentKeyDown = (event) => {
+      if (event.key === "Escape") setOpenDropdown("");
+    };
+    document.addEventListener("pointerdown", onDocumentPointerDown);
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
+      document.removeEventListener("keydown", onDocumentKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    const targetId = Number(compareFamilyId || 0);
+    if (!targetId || targetId === Number(activeFamilyId || 0)) {
+      setComparePeopleRaw([]);
+      setCompareError("");
+      return;
+    }
+
+    let cancelled = false;
+    const loadComparePeople = async () => {
+      setCompareLoading(true);
+      setCompareError("");
+      try {
+        const rows = await api(`/api/people?familyId=${targetId}`);
+        if (!cancelled) setComparePeopleRaw(Array.isArray(rows) ? rows : []);
+      } catch (err) {
+        if (!cancelled) {
+          setComparePeopleRaw([]);
+          setCompareError(getApiErrorMessage(err, "Ne mogu ucitati porodicu za poredjenje."));
+        }
+      } finally {
+        if (!cancelled) setCompareLoading(false);
+      }
+    };
+
+    loadComparePeople();
+    return () => {
+      cancelled = true;
+    };
+  }, [compareFamilyId, activeFamilyId]);
+
   const detailed = useMemo(() => {
     const now = new Date().getFullYear();
     const list = Array.isArray(people) ? people : [];
@@ -204,17 +305,20 @@ const StatsView = ({
     background: `conic-gradient(#22c55e 0 ${livingPct}%, #ef4444 ${livingPct}% 100%)`,
   };
 
-  const kpis = [
+  const primaryKpis = [
     { label: "Ukupno clanova", value: detailed.total },
     { label: "Zivi", value: detailed.living },
     { label: "Preminuli", value: detailed.deceased },
     { label: "Pinovani", value: detailed.pinned },
+    { label: "Prosjecna dob (zivi)", value: `${detailed.avgLivingAge.toFixed(1)} g` },
+    { label: "Maks djece po osobi", value: detailed.maxChildren },
+  ];
+
+  const secondaryKpis = [
     { label: "Korijenski cvorovi", value: detailed.roots },
     { label: "List cvorovi", value: detailed.leaves },
-    { label: "Maks djece po osobi", value: detailed.maxChildren },
     { label: "Najstariji zivi", value: detailed.oldestLiving ? `${detailed.oldestLiving} g` : "-" },
     { label: "Najmladji zivi", value: detailed.youngestLiving ? `${detailed.youngestLiving} g` : "-" },
-    { label: "Prosjecna dob (zivi)", value: `${detailed.avgLivingAge.toFixed(1)} g` },
     { label: "Prosjecni zivotni vijek", value: `${detailed.avgLifespan.toFixed(1)} g` },
     { label: "Najranije rođenje", value: detailed.earliestBirth || "-" },
     { label: "Najkasnije rođenje", value: detailed.latestBirth || "-" },
@@ -224,44 +328,261 @@ const StatsView = ({
     { label: "Rizični faktori", value: detailed.riskFactors },
   ];
 
+  const compareFamilies = useMemo(
+    () => (families || []).filter((family) => Number(family.id) !== Number(activeFamilyId || 0)),
+    [families, activeFamilyId]
+  );
+
+  const compareFamily = useMemo(
+    () => (families || []).find((family) => Number(family.id) === Number(compareFamilyId || 0)) || null,
+    [families, compareFamilyId]
+  );
+
+  const comparePeople = useMemo(
+    () => (pinnedOnly ? comparePeopleRaw.filter((p) => p.isPinned) : comparePeopleRaw),
+    [comparePeopleRaw, pinnedOnly]
+  );
+
+  const currentCompare = useMemo(() => buildCompareStats(people), [people]);
+  const otherCompare = useMemo(() => buildCompareStats(comparePeople), [comparePeople]);
+
+  const compareRows = useMemo(
+    () => [
+      { key: "total", label: "Ukupno clanova", decimals: 0 },
+      { key: "living", label: "Zivi", decimals: 0 },
+      { key: "deceased", label: "Preminuli", decimals: 0 },
+      { key: "pinned", label: "Pinovani", decimals: 0 },
+      { key: "withPhoto", label: "Sa fotografijom", decimals: 0 },
+      { key: "maxChildren", label: "Maks djece po osobi", decimals: 0 },
+      { key: "avgLivingAge", label: "Prosjecna dob (zivi)", decimals: 1, suffix: " g" },
+    ],
+    []
+  );
+
+  const peopleList = useMemo(() => (Array.isArray(people) ? people : []), [people]);
+
+  const surnameMembersMap = useMemo(() => {
+    const map = new Map();
+    peopleList.forEach((person) => {
+      const surname = getSurname(person.name || "");
+      if (!surname) return;
+      const key = surname.toLowerCase();
+      const next = map.get(key) || [];
+      next.push(person);
+      map.set(key, next);
+    });
+    return map;
+  }, [peopleList]);
+
+  const childrenByParentMap = useMemo(() => {
+    const map = new Map();
+    peopleList.forEach((person) => {
+      const p1 = Number(person.parent || 0);
+      const p2 = Number(person.parent2 || 0);
+      if (p1) map.set(p1, (map.get(p1) || 0) + 1);
+      if (p2) map.set(p2, (map.get(p2) || 0) + 1);
+    });
+    return map;
+  }, [peopleList]);
+
+  const decadeMembersMap = useMemo(() => {
+    const map = new Map();
+    peopleList.forEach((person) => {
+      const birth = safeYear(person.birthYear);
+      if (!birth) return;
+      const decade = `${Math.floor(birth / 10) * 10}s`;
+      const next = map.get(decade) || [];
+      next.push(person);
+      map.set(decade, next);
+    });
+    return map;
+  }, [peopleList]);
+
+  const openDrilldown = (title, list) => {
+    const sorted = [...(Array.isArray(list) ? list : [])].sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || ""))
+    );
+    setDrilldown({ isOpen: true, title, people: sorted });
+  };
+
+  const selectedFamilyLabel = useMemo(() => {
+    const selected = (families || []).find((family) => Number(family.id) === Number(activeFamilyId));
+    return selected?.name || "Bez porodice";
+  }, [families, activeFamilyId]);
+
+  const selectedCompareLabel = useMemo(() => {
+    if (!compareFamilyId) return "Bez poredjenja";
+    const selected = (families || []).find((family) => Number(family.id) === Number(compareFamilyId));
+    return selected?.name || "Bez poredjenja";
+  }, [families, compareFamilyId]);
+
   return (
-    <div className="panel page stats-page">
-      <div className="page-header">
-        <div>
+    <div className="panel page stats-page" ref={dropdownRootRef}>
+      <div className="stats-head">
+        <div className="stats-head-title">
           <h2>Statistika porodice</h2>
-          <p className="muted-text">{activeFamily ? activeFamily.name : "Sve porodice"}</p>
         </div>
-        <div className="family-select compact">
-          <Layers className="w-4 h-4" />
-          <select
-            value={activeFamilyId || ""}
-            onChange={(e) => onFamilyChange(Number(e.target.value))}
-          >
-            {families.map((family) => (
-              <option key={family.id} value={family.id}>
-                {family.name}
-              </option>
-            ))}
-          </select>
+        <div className="stats-head-controls">
+          <div className="family-select compact stats-family-dropdown">
+            <Layers className="w-4 h-4" />
+            <div className="stats-dropdown">
+              <button
+                type="button"
+                className="stats-dropdown-trigger"
+                aria-label="Aktivna porodica"
+                aria-haspopup="listbox"
+                aria-expanded={openDropdown === "family"}
+                onClick={() => setOpenDropdown((prev) => (prev === "family" ? "" : "family"))}
+              >
+                <span>{selectedFamilyLabel}</span>
+                <ChevronDown className={`stats-dropdown-chevron ${openDropdown === "family" ? "is-open" : ""}`} />
+              </button>
+              {openDropdown === "family" && (
+                <div className="stats-dropdown-menu" role="listbox" aria-label="Porodice opcije">
+                  {(families || []).map((family) => (
+                    <button
+                      key={family.id}
+                      type="button"
+                      role="option"
+                      aria-selected={Number(activeFamilyId) === Number(family.id)}
+                      className={`stats-dropdown-option ${
+                        Number(activeFamilyId) === Number(family.id) ? "is-selected" : ""
+                      }`}
+                      onClick={() => {
+                        onFamilyChange(Number(family.id));
+                        setOpenDropdown("");
+                      }}
+                    >
+                      {family.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="stats-compare-picker stats-compare-picker-inline">
+            <span>Poredi sa:</span>
+            <div className="stats-dropdown stats-dropdown-compact">
+              <button
+                type="button"
+                className="stats-dropdown-trigger stats-dropdown-trigger-compact"
+                aria-label="Poredi sa porodicom"
+                aria-haspopup="listbox"
+                aria-expanded={openDropdown === "compare"}
+                onClick={() => setOpenDropdown((prev) => (prev === "compare" ? "" : "compare"))}
+              >
+                <span>{selectedCompareLabel}</span>
+                <ChevronDown className={`stats-dropdown-chevron ${openDropdown === "compare" ? "is-open" : ""}`} />
+              </button>
+              {openDropdown === "compare" && (
+                <div className="stats-dropdown-menu" role="listbox" aria-label="Poredjenje opcije">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={!compareFamilyId}
+                    className={`stats-dropdown-option ${!compareFamilyId ? "is-selected" : ""}`}
+                    onClick={() => {
+                      setCompareFamilyId(0);
+                      setOpenDropdown("");
+                    }}
+                  >
+                    Bez poredjenja
+                  </button>
+                  {compareFamilies.map((family) => (
+                    <button
+                      key={family.id}
+                      type="button"
+                      role="option"
+                      aria-selected={Number(compareFamilyId) === Number(family.id)}
+                      className={`stats-dropdown-option ${
+                        Number(compareFamilyId) === Number(family.id) ? "is-selected" : ""
+                      }`}
+                      onClick={() => {
+                        setCompareFamilyId(Number(family.id));
+                        setOpenDropdown("");
+                      }}
+                    >
+                      {family.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={Boolean(pinnedOnly)}
+              onChange={(e) => onPinnedOnlyChange(e.target.checked)}
+            />
+            <span>Samo pinovani</span>
+          </label>
         </div>
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={Boolean(pinnedOnly)}
-            onChange={(e) => onPinnedOnlyChange(e.target.checked)}
-          />
-          <span>Samo pinovani</span>
-        </label>
       </div>
 
-      <div className="stats-cards">
-        {kpis.map((item) => (
-          <div className="card stat-card" key={item.label}>
-            <p className="stat-label">{item.label}</p>
-            <p className="stat-value">{item.value}</p>
-          </div>
-        ))}
+      <div className="card stats-kpi-panel">
+        <div className="stats-kpi-panel-head">
+          <h3>Osnovna statistika</h3>
+          <span className="stats-kpi-total">{detailed.total} clanova</span>
+        </div>
+
+        <div className="stats-cards stats-cards-primary">
+          {primaryKpis.map((item) => (
+            <div className="stat-card stat-card-primary" key={item.label}>
+              <p className="stat-label">{item.label}</p>
+              <p className="stat-value">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="stats-cards stats-cards-secondary">
+          {secondaryKpis.map((item) => (
+            <div className="stat-card stat-card-secondary" key={item.label}>
+              <p className="stat-label">{item.label}</p>
+              <p className="stat-value">{item.value}</p>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {(Boolean(compareFamilyId) || compareLoading || Boolean(compareError)) && (
+        <div className="card stats-compare-panel">
+          <div className="stats-compare-head">
+            <h3>Poredjenje porodica</h3>
+          </div>
+          {compareLoading && <p className="muted-text">Ucitavanje poredjenja...</p>}
+          {compareError && <p className="muted-text" style={{ color: "#b91c1c" }}>{compareError}</p>}
+
+          {Boolean(compareFamilyId) && !compareLoading && !compareError && (
+            <div className="stats-compare-grid">
+              <div className="stats-compare-row stats-compare-head-row">
+                <span>Metrika</span>
+                <span>Aktivna</span>
+                <span>{compareFamily?.name || "Druga porodica"}</span>
+                <span>Razlika</span>
+              </div>
+              {compareRows.map((row) => {
+                const decimals = row.decimals || 0;
+                const currentValue = Number(currentCompare[row.key] || 0);
+                const otherValue = Number(otherCompare[row.key] || 0);
+                const delta = currentValue - otherValue;
+                const suffix = row.suffix || "";
+                const format = (val) => `${val.toFixed(decimals)}${suffix}`;
+                return (
+                  <div key={row.key} className="stats-compare-row">
+                    <span>{row.label}</span>
+                    <span>{format(currentValue)}</span>
+                    <span>{format(otherValue)}</span>
+                    <span className={delta > 0 ? "stats-delta-pos" : delta < 0 ? "stats-delta-neg" : ""}>
+                      {(delta > 0 ? "+" : "") + format(delta)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="stats-grid-2">
         <div className="card chart-card">
@@ -319,10 +640,18 @@ const StatsView = ({
           <div className="list compact-list">
             {detailed.topSurnames.length === 0 && <p className="muted-text">Nema podataka.</p>}
             {detailed.topSurnames.map((row) => (
-              <div className="list-item" key={row.name}>
+              <button
+                type="button"
+                className="list-item stats-clickable-row"
+                key={row.name}
+                onClick={() => {
+                  const members = surnameMembersMap.get(String(row.name || "").toLowerCase()) || [];
+                  openDrilldown(`Prezime: ${row.name}`, members);
+                }}
+              >
                 <h4>{row.name}</h4>
                 <span className="pill blue">{row.count}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -332,10 +661,22 @@ const StatsView = ({
           <div className="list compact-list">
             {detailed.topParents.length === 0 && <p className="muted-text">Nema podataka.</p>}
             {detailed.topParents.map((row) => (
-              <div className="list-item" key={`${row.name}-${row.count}`}>
+              <button
+                type="button"
+                className="list-item stats-clickable-row"
+                key={`${row.name}-${row.count}`}
+                onClick={() => {
+                  const members = peopleList.filter(
+                    (person) =>
+                      person.name === row.name &&
+                      (childrenByParentMap.get(Number(person.id || 0)) || 0) === Number(row.count || 0)
+                  );
+                  openDrilldown(`Roditelj: ${row.name}`, members);
+                }}
+              >
                 <h4>{row.name}</h4>
                 <span className="pill pink">{row.count}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -346,13 +687,21 @@ const StatsView = ({
         <div className="dist-chart">
           {detailed.decadeRows.length === 0 && <p className="muted-text">Nema podataka.</p>}
           {detailed.decadeRows.map(([decade, count]) => (
-            <div className="dist-row" key={decade}>
+            <button
+              type="button"
+              className="dist-row stats-clickable-row stats-clickable-dist"
+              key={decade}
+              onClick={() => {
+                const members = decadeMembersMap.get(decade) || [];
+                openDrilldown(`Rođeni u ${decade}`, members);
+              }}
+            >
               <span className="dist-label">{decade}</span>
               <div className="dist-track">
                 <div className="dist-fill pink" style={{ width: `${(count / maxDecade) * 100}%` }} />
               </div>
               <strong className="dist-value">{count}</strong>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -364,9 +713,45 @@ const StatsView = ({
           generacija ide od {detailed.earliestBirth || "-"} do {detailed.latestBirth || "-"}.
         </p>
       </div>
+      {drilldown.isOpen && (
+        <div
+          className="stats-drilldown-backdrop"
+          onClick={() => setDrilldown({ isOpen: false, title: "", people: [] })}
+        >
+          <div className="stats-drilldown-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="stats-drilldown-head">
+              <h3>{drilldown.title}</h3>
+              <button
+                type="button"
+                className="btn-icon"
+                aria-label="Zatvori"
+                onClick={() => setDrilldown({ isOpen: false, title: "", people: [] })}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="stats-drilldown-list">
+              {drilldown.people.length === 0 ? (
+                <p className="muted-text">Nema podataka.</p>
+              ) : (
+                drilldown.people.map((person) => (
+                  <div key={`dd-${person.id}`} className="stats-drilldown-item">
+                    <span>{person.name || "Bez imena"}</span>
+                    <small>
+                      {person.birthYear || "?"}
+                      {person.deathYear ? ` - ${person.deathYear}` : ""}
+                    </small>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default StatsView;
+
 

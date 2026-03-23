@@ -6,10 +6,12 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  RotateCcw,
   Layers,
   Trash2,
   Pencil,
   ArrowLeft,
+  ChevronDown,
 } from "lucide-react";
 import { buildModelData } from "./tree-model";
 import { applyManualLayout } from "./gojs-layout";
@@ -19,6 +21,7 @@ import {
   TREE_SPOUSE_CURVINESS,
   TREE_SPOUSE_CURVE_DIR,
 } from "./tree-constants";
+import * as go from "gojs";
 
 const normalizePhotoSource = (photo) => {
   const value = String(photo || "").trim();
@@ -73,7 +76,47 @@ const formatCompactName = (name, max = 20) => {
     if (short.length <= max) return short;
   }
   if (max <= 1) return value.slice(0, max);
-  return `${value.slice(0, max - 1)}…`;
+  return `${value.slice(0, max - 1)}...`;
+};
+
+const getCardExtraText = (data, field) => {
+  if (!data) return "-";
+  if (field === "occupation") {
+    const value = String(data.occupation || "").trim();
+    return value || "Bez zanimanja";
+  }
+  if (field === "birthPlace") {
+    const value = String(data.birthPlace || "").trim();
+    return value || "Mjesto rodenja nepoznato";
+  }
+  if (field === "birthYear") {
+    const value = String(data.birthYear || "").trim();
+    return value || "Godina rodenja nepoznata";
+  }
+  if (field === "burialPlace") {
+    const value = String(data.burialPlace || "").trim();
+    return value || "Mjesto ukopa nepoznato";
+  }
+  if (field === "photo") {
+    return data.hasPhoto ? "Ima fotografiju" : "Nema fotografiju";
+  }
+  if (field === "bio") {
+    return String(data.bio || "").trim() ? "Ima biografiju" : "Nema biografiju";
+  }
+  if (field === "marital") {
+    if (!data.spouse) return "Nije u braku";
+    return data.divorced ? "Razveden/a" : "U braku";
+  }
+  if (field === "health") {
+    if (data.healthBadge === "hereditary") return "Nasljedni rizik";
+    if (data.healthBadge === "risk") return "Rizicni faktori";
+    return "Bez oznake rizika";
+  }
+  if (field === "pin") {
+    return data.isPinned ? "Pinovan clan" : "Nije pinovan";
+  }
+  if (field === "none") return "";
+  return data.gender === "F" ? "Zensko" : "Musko";
 };
 
 const TreeView = ({
@@ -116,13 +159,76 @@ const TreeView = ({
   const onEditRef = useRef(onEditPerson);
   const onOpenDetailsRef = useRef(onOpenPersonDetails);
   const clickTimerRef = useRef(null);
+  const cardExtraSelectRef = useRef(null);
+  const focusSelectRef = useRef(null);
+  const tagSelectRef = useRef(null);
+  const familySelectRef = useRef(null);
   const [profilePersonId, setProfilePersonId] = useState(null);
   const [cardView, setCardView] = useState("detailed");
+  const [cardExtraField, setCardExtraField] = useState("occupation");
+  const [cardExtraOpen, setCardExtraOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [tagOpen, setTagOpen] = useState(false);
+  const [familyOpen, setFamilyOpen] = useState(false);
   const [profilePhotoFailed, setProfilePhotoFailed] = useState(false);
+
+  const cardExtraOptions = useMemo(
+    () => [
+      { value: "occupation", label: "Zanimanje" },
+      { value: "gender", label: "Spol" },
+      { value: "birthPlace", label: "Rođenje mjesto" },
+      { value: "birthYear", label: "Rođenje godina" },
+      { value: "burialPlace", label: "Mjesto ukopa" },
+      { value: "photo", label: "Foto status" },
+      { value: "bio", label: "Bio status" },
+      { value: "marital", label: "Bračni status" },
+      { value: "health", label: "Zdravlje" },
+      { value: "pin", label: "Pin status" },
+      { value: "none", label: "Nista" },
+    ],
+    []
+  );
+
+  const selectedCardExtraLabel = useMemo(
+    () =>
+      cardExtraOptions.find((option) => option.value === cardExtraField)?.label || "Zanimanje",
+    [cardExtraField, cardExtraOptions]
+  );
 
   useEffect(() => {
     visibleRef.current = visiblePeople;
   }, [visiblePeople]);
+
+  useEffect(() => {
+    const onDocumentPointerDown = (event) => {
+      if (!focusSelectRef.current?.contains(event.target)) {
+        setFocusOpen(false);
+      }
+      if (!tagSelectRef.current?.contains(event.target)) {
+        setTagOpen(false);
+      }
+      if (!familySelectRef.current?.contains(event.target)) {
+        setFamilyOpen(false);
+      }
+      if (!cardExtraSelectRef.current?.contains(event.target)) {
+        setCardExtraOpen(false);
+      }
+    };
+    const onDocumentKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setFocusOpen(false);
+        setTagOpen(false);
+        setFamilyOpen(false);
+        setCardExtraOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDocumentPointerDown);
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
+      document.removeEventListener("keydown", onDocumentKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     onEditRef.current = onEditPerson;
@@ -256,20 +362,20 @@ const TreeView = ({
   }, []);
 
   const initDiagram = useCallback(() => {
-    if (!window.go || !diagramRef.current) return;
+    if (!go || !diagramRef.current) return;
 
-    const $ = window.go.GraphObject.make;
-    goRef.current = window.go;
-    const existingDiagram = window.go.Diagram.fromDiv(diagramRef.current);
+    const $ = go.GraphObject.make;
+    goRef.current = go;
+    const existingDiagram = go.Diagram.fromDiv(diagramRef.current);
     if (existingDiagram) {
       diagramInstanceRef.current = existingDiagram;
       const { nodeDataArray, linkDataArray } = buildModelData(visibleRef.current, {
         cardMode: cardView,
         resolvePhoto: normalizePhotoSource,
       });
-      const model = new window.go.GraphLinksModel(nodeDataArray, linkDataArray);
+      const model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
       existingDiagram.model = model;
-      applyManualLayout(existingDiagram, visibleRef.current, window.go);
+      applyManualLayout(existingDiagram, visibleRef.current, go);
       setTimeout(() => positionMarriageNodes(existingDiagram), 0);
       return;
     }
@@ -296,13 +402,13 @@ const TreeView = ({
       if (onOpenDetailsRef.current) onOpenDetailsRef.current(data);
     };
 
-    const diagram = $(window.go.Diagram, diagramRef.current, {
+    const diagram = $(go.Diagram, diagramRef.current, {
       "undoManager.isEnabled": true,
-      initialAutoScale: window.go.Diagram.Uniform,
+      initialAutoScale: go.Diagram.Uniform,
       "animationManager.isEnabled": false,
       padding: 20,
     });
-    diagram.layout = new window.go.Layout();
+    diagram.layout = new go.Layout();
     diagram.layout.isInitial = false;
     diagram.layout.isOngoing = false;
 
@@ -326,13 +432,13 @@ const TreeView = ({
     if (diagram.div) {
       const handler = (ev) => {
         const rect = diagram.div.getBoundingClientRect();
-        const viewPoint = new window.go.Point(
+        const viewPoint = new go.Point(
           ev.clientX - rect.left,
           ev.clientY - rect.top
         );
         const docPoint = diagram.transformViewToDoc(viewPoint);
         const part = diagram.findPartAt(docPoint, true);
-        if (part instanceof window.go.Node && part.data && !part.data.category) {
+        if (part instanceof go.Node && part.data && !part.data.category) {
           openEditor(part);
         }
       };
@@ -343,18 +449,18 @@ const TreeView = ({
 
     diagram.nodeTemplate = (
       $(
-        window.go.Node,
+        go.Node,
         "Auto",
         {
-          locationSpot: window.go.Spot.Center,
+          locationSpot: go.Spot.Center,
           isLayoutPositioned: true,
           doubleClick: (e, node) => {
             openEditor(node);
           },
         },
-        new window.go.Binding("isLayoutPositioned", "isLayoutPositioned"),
+        new go.Binding("isLayoutPositioned", "isLayoutPositioned"),
         $(
-          window.go.Shape,
+          go.Shape,
           "RoundedRectangle",
           {
             parameter1: 14,
@@ -362,64 +468,64 @@ const TreeView = ({
             stroke: "#1D4ED8",
             strokeWidth: 2,
             cursor: "pointer",
-            desiredSize: new window.go.Size(TREE_NODE_WIDTH, TREE_NODE_HEIGHT),
+            desiredSize: new go.Size(TREE_NODE_WIDTH, TREE_NODE_HEIGHT),
           },
-          new window.go.Binding("stroke", "cardStroke"),
-          new window.go.Binding("fill", "cardFill")
+          new go.Binding("stroke", "cardStroke"),
+          new go.Binding("fill", "cardFill")
         ),
         $(
-          window.go.Panel,
+          go.Panel,
           "Auto",
-          { margin: 8, alignment: window.go.Spot.Center },
+          { margin: 8, alignment: go.Spot.Center },
           $(
-            window.go.Panel,
+            go.Panel,
             "Vertical",
-            { alignment: window.go.Spot.Center },
+            { alignment: go.Spot.Center },
             $(
-              window.go.Panel,
+              go.Panel,
               "Table",
               {
-                margin: new window.go.Margin(2, 0, 0, 0),
-                defaultAlignment: window.go.Spot.Left,
+                margin: new go.Margin(2, 0, 0, 0),
+                defaultAlignment: go.Spot.Left,
                 visible: true,
               },
-              new window.go.Binding("visible", "cardMode", (mode) => mode !== "compact"),
-              $(window.go.RowColumnDefinition, { column: 0, width: 42 }),
-              $(window.go.RowColumnDefinition, { column: 1, width: TREE_NODE_WIDTH - 92 }),
+              new go.Binding("visible", "cardMode", (mode) => mode !== "compact"),
+              $(go.RowColumnDefinition, { column: 0, width: 42 }),
+              $(go.RowColumnDefinition, { column: 1, width: TREE_NODE_WIDTH - 92 }),
               $(
-                window.go.Panel,
+                go.Panel,
                 "Auto",
                 {
                   row: 0,
                   column: 0,
                   rowSpan: 3,
-                  margin: new window.go.Margin(0, 8, 0, 0),
-                  alignment: window.go.Spot.Center,
+                  margin: new go.Margin(0, 8, 0, 0),
+                  alignment: go.Spot.Center,
                 },
-                $(window.go.Shape, "Circle", {
+                $(go.Shape, "Circle", {
                   fill: "#111827",
                   stroke: null,
                   width: 34,
                   height: 34,
                 }),
                 $(
-                  window.go.Picture,
+                  go.Picture,
                   {
                     width: 34,
                     height: 34,
-                    imageStretch: window.go.GraphObject.UniformToFill,
+                    imageStretch: go.GraphObject.Uniform,
                   },
-                  new window.go.Binding("source", "photoSrc", (photo) => photo || null),
-                  new window.go.Binding("visible", "hasPhoto")
+                  new go.Binding("source", "photoSrc", (photo) => photo || null),
+                  new go.Binding("visible", "hasPhoto")
                 ),
                 $(
-                  window.go.TextBlock,
+                  go.TextBlock,
                   {
                     font: "500 14px 'Space Grotesk', sans-serif",
                     stroke: "#F9FAFB",
                   },
-                  new window.go.Binding("visible", "hasPhoto", (hasPhoto) => !hasPhoto),
-                  new window.go.Binding("text", "name", (name) =>
+                  new go.Binding("visible", "hasPhoto", (hasPhoto) => !hasPhoto),
+                  new go.Binding("text", "name", (name) =>
                     getCleanName(name)
                       .split(" ")
                       .slice(0, 2)
@@ -430,85 +536,83 @@ const TreeView = ({
                 )
               ),
               $(
-                window.go.TextBlock,
+                go.TextBlock,
                 {
                   row: 0,
                   column: 1,
                   font: "500 14px 'Space Grotesk', sans-serif",
                   stroke: "#111827",
-                  margin: new window.go.Margin(2, 0, 2, 0),
+                  margin: new go.Margin(2, 0, 2, 0),
                   maxLines: 2,
-                  wrap: window.go.TextBlock.WrapFit,
-                  overflow: window.go.TextBlock.OverflowEllipsis,
+                  wrap: go.TextBlock.WrapFit,
+                  overflow: go.TextBlock.OverflowEllipsis,
                   textAlign: "left",
                 },
-                new window.go.Binding("text", "name", (name) => getCleanName(name))
+                new go.Binding("text", "name", (name) => getCleanName(name))
               ),
               $(
-                window.go.TextBlock,
+                go.TextBlock,
                 {
                   row: 1,
                   column: 1,
                   font: "12px 'Space Grotesk', sans-serif",
                   stroke: "#4B5563",
                   maxLines: 1,
-                  overflow: window.go.TextBlock.OverflowEllipsis,
+                  overflow: go.TextBlock.OverflowEllipsis,
                   textAlign: "left",
                 },
-                new window.go.Binding("text", (data) => getLifeLabel(data))
+                new go.Binding("text", "", (data) => getLifeLabel(data))
               ),
               $(
-                window.go.TextBlock,
+                go.TextBlock,
                 {
                   row: 2,
                   column: 1,
                   font: "11px 'Space Grotesk', sans-serif",
                   stroke: "#64748B",
                   maxLines: 1,
-                  overflow: window.go.TextBlock.OverflowEllipsis,
+                  overflow: go.TextBlock.OverflowEllipsis,
                   textAlign: "left",
                 },
-                new window.go.Binding("text", (data) =>
-                  data.gender === "F" ? "Žensko" : "Muško"
-                )
+                new go.Binding("text", "", (data) => getCardExtraText(data, cardExtraField))
               )
             ),
             $(
-              window.go.Panel,
+              go.Panel,
               "Horizontal",
               {
-                margin: new window.go.Margin(8, 0, 0, 0),
+                margin: new go.Margin(8, 0, 0, 0),
                 visible: false,
               },
-              new window.go.Binding("visible", "cardMode", (mode) => mode === "compact"),
+              new go.Binding("visible", "cardMode", (mode) => mode === "compact"),
               $(
-                window.go.Panel,
+                go.Panel,
                 "Auto",
-                { margin: new window.go.Margin(0, 6, 0, 0) },
-                $(window.go.Shape, "Circle", {
+                { margin: new go.Margin(0, 6, 0, 0) },
+                $(go.Shape, "Circle", {
                   fill: "#0F172A",
                   stroke: null,
                   width: 26,
                   height: 26,
                 }),
                 $(
-                  window.go.Picture,
+                  go.Picture,
                   {
                     width: 26,
                     height: 26,
-                    imageStretch: window.go.GraphObject.UniformToFill,
+                    imageStretch: go.GraphObject.Uniform,
                   },
-                  new window.go.Binding("source", "photoSrc", (photo) => photo || null),
-                  new window.go.Binding("visible", "hasPhoto")
+                  new go.Binding("source", "photoSrc", (photo) => photo || null),
+                  new go.Binding("visible", "hasPhoto")
                 ),
                 $(
-                  window.go.TextBlock,
+                  go.TextBlock,
                   {
                     font: "500 11px 'Space Grotesk', sans-serif",
                     stroke: "#F8FAFC",
                   },
-                  new window.go.Binding("visible", "hasPhoto", (hasPhoto) => !hasPhoto),
-                  new window.go.Binding("text", "name", (name) =>
+                  new go.Binding("visible", "hasPhoto", (hasPhoto) => !hasPhoto),
+                  new go.Binding("text", "name", (name) =>
                     getCleanName(name)
                       .split(" ")
                       .slice(0, 2)
@@ -519,18 +623,21 @@ const TreeView = ({
                 )
               ),
               $(
-                window.go.TextBlock,
+                go.TextBlock,
                 {
                   font: "500 13px 'Space Grotesk', sans-serif",
                   stroke: "#0F172A",
                   width: TREE_NODE_WIDTH - 56,
                   maxLines: 1,
-                  overflow: window.go.TextBlock.OverflowEllipsis,
+                  overflow: go.TextBlock.OverflowEllipsis,
                   textAlign: "left",
                 },
-                new window.go.Binding("text", (data) => {
+                new go.Binding("text", "", (data) => {
                   const compactName = formatCompactName(data.name, 20);
-                  return `${compactName} (${getLifeLabel(data)})`;
+                  const extra = getCardExtraText(data, cardExtraField);
+                  return extra
+                    ? `${compactName} (${getLifeLabel(data)}) - ${extra}`
+                    : `${compactName} (${getLifeLabel(data)})`;
                 })
               )
             )
@@ -542,60 +649,60 @@ const TreeView = ({
     diagram.nodeTemplateMap.add(
       "Marriage",
       $(
-        window.go.Node,
+        go.Node,
         "Spot",
         {
           selectable: false,
           pickable: false,
           layerName: "Background",
-          locationSpot: window.go.Spot.Center,
+          locationSpot: go.Spot.Center,
         },
-        $(window.go.Shape, "Circle", {
+        $(go.Shape, "Circle", {
           portId: "",
           width: 2,
           height: 2,
           fill: "transparent",
           stroke: null,
-          alignment: window.go.Spot.Center,
+          alignment: go.Spot.Center,
         })
       )
     );
 
     diagram.linkTemplate = $(
-      window.go.Link,
+      go.Link,
       {
         selectable: false,
         pickable: false,
-        routing: window.go.Link.Orthogonal,
+        routing: go.Link.Orthogonal,
         corner: 0,
         layerName: "Background",
-        fromSpot: window.go.Spot.Bottom,
-        toSpot: window.go.Spot.Top,
+        fromSpot: go.Spot.Bottom,
+        toSpot: go.Spot.Top,
       },
-      $(window.go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
+      $(go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
     );
 
     diagram.linkTemplateMap.add(
       "Spouse",
       $(
-        window.go.Link,
+        go.Link,
         {
           selectable: false,
           pickable: false,
-          routing: window.go.Link.Normal,
-          curve: window.go.Link.Bezier,
+          routing: go.Link.Normal,
+          curve: go.Link.Bezier,
           curviness: TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
           computeCurviness: () => TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
-          fromSpot: window.go.Spot.RightSide,
-          toSpot: window.go.Spot.LeftSide,
+          fromSpot: go.Spot.RightSide,
+          toSpot: go.Spot.LeftSide,
           fromEndSegmentLength: 10,
           toEndSegmentLength: 10,
           layerName: "Background",
         },
         $(
-          window.go.Shape,
+          go.Shape,
           { strokeWidth: 2.6, stroke: "#7C3AED" },
-          new window.go.Binding("strokeDashArray", "isDivorced", (value) =>
+          new go.Binding("strokeDashArray", "isDivorced", (value) =>
             value ? [8, 6] : null
           )
         )
@@ -605,23 +712,23 @@ const TreeView = ({
     diagram.linkTemplateMap.add(
       "ParentChild",
       $(
-        window.go.Link,
+        go.Link,
         {
           selectable: false,
           pickable: false,
-          routing: window.go.Link.Orthogonal,
+          routing: go.Link.Orthogonal,
           corner: 0,
-          fromSpot: window.go.Spot.Bottom,
-          toSpot: window.go.Spot.Top,
+          fromSpot: go.Spot.Bottom,
+          toSpot: go.Spot.Top,
         },
-        $(window.go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
+        $(go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
       )
     );
 
     diagramInstanceRef.current = diagram;
 
     if (overviewRef.current) {
-      overviewInstanceRef.current = $(window.go.Overview, overviewRef.current, {
+      overviewInstanceRef.current = $(go.Overview, overviewRef.current, {
         observed: diagram,
       });
     }
@@ -630,42 +737,18 @@ const TreeView = ({
       cardMode: cardView,
       resolvePhoto: normalizePhotoSource,
     });
-    const model = new window.go.GraphLinksModel(nodeDataArray, linkDataArray);
+    const model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
     diagram.model = model;
-    applyManualLayout(diagram, visibleRef.current, window.go);
+    applyManualLayout(diagram, visibleRef.current, go);
     setTimeout(() => positionMarriageNodes(diagram), 0);
-  }, [cardView, positionMarriageNodes]);
+  }, [cardView, cardExtraField, positionMarriageNodes]);
 
   useEffect(() => {
-    const scriptSrc = "https://cdnjs.cloudflare.com/ajax/libs/gojs/2.3.11/go.js";
-    const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
-    let script = null;
-    let onLoad = null;
-
-    if (!existingScript) {
-      script = document.createElement("script");
-      script.src = scriptSrc;
-      script.async = true;
-      onLoad = () => initDiagram();
-      script.addEventListener("load", onLoad);
-      document.body.appendChild(script);
-    } else {
-      if (window.go) {
-        initDiagram();
-      } else {
-        script = existingScript;
-        onLoad = () => initDiagram();
-        script.addEventListener("load", onLoad);
-      }
-    }
-
+    initDiagram();
     return () => {
       if (clickTimerRef.current) {
         clearTimeout(clickTimerRef.current);
         clickTimerRef.current = null;
-      }
-      if (script && onLoad) {
-        script.removeEventListener("load", onLoad);
       }
       if (overviewInstanceRef.current) {
         overviewInstanceRef.current.div = null;
@@ -693,7 +776,7 @@ const TreeView = ({
     diagramInstanceRef.current.model = model;
     applyManualLayout(diagramInstanceRef.current, visiblePeople, goRef.current);
     setTimeout(() => positionMarriageNodes(diagramInstanceRef.current), 0);
-  }, [cardView, visiblePeople, positionMarriageNodes]);
+  }, [cardView, cardExtraField, visiblePeople, positionMarriageNodes]);
 
   useEffect(() => {
     const diagram = diagramInstanceRef.current;
@@ -736,6 +819,31 @@ const TreeView = ({
   const fitToScreen = () => {
     if (diagramInstanceRef.current) diagramInstanceRef.current.zoomToFit();
   };
+
+  const resetTreeLayout = () => {
+    const diagram = diagramInstanceRef.current;
+    const go = goRef.current;
+    if (!diagram || !go) return;
+    applyManualLayout(diagram, visibleRef.current, go);
+    positionMarriageNodes(diagram);
+    diagram.zoomToFit();
+  };
+
+  const selectedFocusPerson = useMemo(() => {
+    if (!people.length) return null;
+    return people.find((person) => Number(person.id) === Number(focusPersonId)) || people[0];
+  }, [people, focusPersonId]);
+
+  const selectedTagLabel = useMemo(() => {
+    if (!activeTagId) return "Sve oznake";
+    const selected = (tags || []).find((tag) => Number(tag.id) === Number(activeTagId));
+    return selected?.name || "Sve oznake";
+  }, [activeTagId, tags]);
+
+  const selectedFamilyLabel = useMemo(() => {
+    const selected = (families || []).find((family) => Number(family.id) === Number(activeFamilyId));
+    return selected?.name || "Bez porodice";
+  }, [families, activeFamilyId]);
   
 
   return (
@@ -766,18 +874,45 @@ const TreeView = ({
 
         <div className="panel card">
           <h3>{"Porodične grupe"}</h3>
-          <div className="family-select">
+          <div className="family-select" ref={familySelectRef}>
             <Layers className="w-4 h-4" />
-            <select
-              value={activeFamilyId || ""}
-              onChange={(e) => onFamilyChange(Number(e.target.value))}
+            <button
+              type="button"
+              className="filter-dropdown-trigger family-dropdown-trigger"
+              aria-label="Aktivna porodica"
+              aria-haspopup="listbox"
+              aria-expanded={familyOpen}
+              onClick={() => {
+                setFamilyOpen((prev) => !prev);
+                setFocusOpen(false);
+                setTagOpen(false);
+                setCardExtraOpen(false);
+              }}
             >
-              {families.map((family) => (
-                <option key={family.id} value={family.id}>
-                  {family.name}
-                </option>
-              ))}
-            </select>
+              <span>{selectedFamilyLabel}</span>
+              <ChevronDown className={`card-extra-chevron ${familyOpen ? "is-open" : ""}`} />
+            </button>
+            {familyOpen && (
+              <div className="filter-dropdown-menu family-dropdown-menu" role="listbox" aria-label="Porodice opcije">
+                {(families || []).map((family) => (
+                  <button
+                    key={family.id}
+                    type="button"
+                    role="option"
+                    aria-selected={Number(activeFamilyId) === Number(family.id)}
+                    className={`filter-dropdown-option ${
+                      Number(activeFamilyId) === Number(family.id) ? "is-selected" : ""
+                    }`}
+                    onClick={() => {
+                      onFamilyChange(Number(family.id));
+                      setFamilyOpen(false);
+                    }}
+                  >
+                    {family.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="family-create">
             <input
@@ -834,6 +969,9 @@ const TreeView = ({
             <button onClick={zoomOut} className="btn-icon">
               <ZoomOut className="w-4 h-4" />
             </button>
+            <button onClick={resetTreeLayout} className="btn-icon" title="Reset raspored">
+              <RotateCcw className="w-4 h-4" />
+            </button>
             <button onClick={fitToScreen} className="btn-icon">
               <Maximize2 className="w-4 h-4" />
             </button>
@@ -844,26 +982,107 @@ const TreeView = ({
         <div className="tree-filters">
           <div className="filter-item">
             <span>Fokus</span>
-            <select value={focusPersonId || ""} onChange={(e) => onFocusChange(Number(e.target.value))}>
-              {people.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name || "Bez imena"}
-                </option>
-              ))}
-            </select>
+            <div className="filter-dropdown-wrap" ref={focusSelectRef}>
+              <button
+                type="button"
+                className="filter-dropdown-trigger tree-toolbar-dropdown-trigger"
+                aria-label="Fokus osobe"
+                aria-haspopup="listbox"
+                aria-expanded={focusOpen}
+                onClick={() => {
+                  setFocusOpen((prev) => !prev);
+                  setTagOpen(false);
+                  setCardExtraOpen(false);
+                }}
+              >
+                <span>{selectedFocusPerson?.name || "Bez imena"}</span>
+                <ChevronDown className={`card-extra-chevron ${focusOpen ? "is-open" : ""}`} />
+              </button>
+              {focusOpen && (
+                <div
+                  className="filter-dropdown-menu tree-toolbar-dropdown-menu"
+                  role="listbox"
+                  aria-label="Fokus opcije"
+                >
+                  {people.map((person) => (
+                    <button
+                      key={person.id}
+                      type="button"
+                      role="option"
+                      aria-selected={Number(focusPersonId) === Number(person.id)}
+                      className={`filter-dropdown-option ${
+                        Number(focusPersonId) === Number(person.id) ? "is-selected" : ""
+                      }`}
+                      onClick={() => {
+                        onFocusChange(Number(person.id));
+                        setFocusOpen(false);
+                      }}
+                    >
+                      {person.name || "Bez imena"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="filter-item">
             <span>Oznaka</span>
-            <select value={activeTagId || 0} onChange={(e) => onTagChange(Number(e.target.value))}>
-              <option value={0}>Sve oznake</option>
-              {(tags || []).map((tag) => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
+            <div className="filter-dropdown-wrap" ref={tagSelectRef}>
+              <button
+                type="button"
+                className="filter-dropdown-trigger tree-toolbar-dropdown-trigger"
+                aria-label="Filter oznake"
+                aria-haspopup="listbox"
+                aria-expanded={tagOpen}
+                onClick={() => {
+                  setTagOpen((prev) => !prev);
+                  setFocusOpen(false);
+                  setCardExtraOpen(false);
+                }}
+              >
+                <span>{selectedTagLabel}</span>
+                <ChevronDown className={`card-extra-chevron ${tagOpen ? "is-open" : ""}`} />
+              </button>
+              {tagOpen && (
+                <div
+                  className="filter-dropdown-menu tree-toolbar-dropdown-menu"
+                  role="listbox"
+                  aria-label="Oznake opcije"
+                >
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={!activeTagId}
+                    className={`filter-dropdown-option ${!activeTagId ? "is-selected" : ""}`}
+                    onClick={() => {
+                      onTagChange(0);
+                      setTagOpen(false);
+                    }}
+                  >
+                    Sve oznake
+                  </button>
+                  {(tags || []).map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      role="option"
+                      aria-selected={Number(activeTagId) === Number(tag.id)}
+                      className={`filter-dropdown-option ${
+                        Number(activeTagId) === Number(tag.id) ? "is-selected" : ""
+                      }`}
+                      onClick={() => {
+                        onTagChange(Number(tag.id));
+                        setTagOpen(false);
+                      }}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="filter-item">
+          <div className="filter-item filter-item-display">
             <span>Prikaz</span>
             <div className="segmented">
               {["ancestors", "descendants", "both", "all"].map((mode) => (
@@ -883,9 +1102,10 @@ const TreeView = ({
               ))}
             </div>
           </div>
-          <div className="filter-item">
+          <div className="filter-item filter-item-card">
             <span>Kartica</span>
-            <div className="segmented">
+            <div className="card-controls-row">
+              <div className="segmented card-mode-segmented">
               <button
                 type="button"
                 className={`seg-btn ${cardView === "detailed" ? "active" : ""}`}
@@ -900,6 +1120,49 @@ const TreeView = ({
               >
                 Kompaktno
               </button>
+              </div>
+              <div className="card-extra-select-wrap" ref={cardExtraSelectRef}>
+                <button
+                  type="button"
+                  className="filter-dropdown-trigger tree-toolbar-dropdown-trigger card-extra-select"
+                  aria-label="Dodatno polje kartice"
+                  aria-haspopup="listbox"
+                  aria-expanded={cardExtraOpen}
+                  onClick={() => {
+                    setCardExtraOpen((prev) => !prev);
+                    setFocusOpen(false);
+                    setTagOpen(false);
+                  }}
+                >
+                  <span>{selectedCardExtraLabel}</span>
+                  <ChevronDown className={`card-extra-chevron ${cardExtraOpen ? "is-open" : ""}`} />
+                </button>
+                {cardExtraOpen && (
+                  <div
+                    className="filter-dropdown-menu tree-toolbar-dropdown-menu card-extra-menu"
+                    role="listbox"
+                    aria-label="Dodatno polje kartice opcije"
+                  >
+                    {cardExtraOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={cardExtraField === option.value}
+                        className={`filter-dropdown-option card-extra-option ${
+                          cardExtraField === option.value ? "is-selected" : ""
+                        }`}
+                        onClick={() => {
+                          setCardExtraField(option.value);
+                          setCardExtraOpen(false);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -968,10 +1231,13 @@ const TreeView = ({
                 <div className="tree-profile-grid">
                   <div className="tree-info-card">
                     <h4>Porodični podaci</h4>
-                    <p><strong>Roditelj 1:</strong> {profileParent1 ? getCleanName(profileParent1.name) : "-"}</p>
-                    <p><strong>Roditelj 2:</strong> {profileParent2 ? getCleanName(profileParent2.name) : "-"}</p>
+                    <p><strong>Otac:</strong> {profileParent1 ? getCleanName(profileParent1.name) : "-"}</p>
+                    <p><strong>Majka:</strong> {profileParent2 ? getCleanName(profileParent2.name) : "-"}</p>
                     <p><strong>Supružnik:</strong> {profileSpouse ? getCleanName(profileSpouse.name) : "-"}</p>
                     <p><strong>Broj djece:</strong> {profileChildrenCount}</p>
+                    <p><strong>Zanimanje:</strong> {String(profilePerson.occupation || "").trim() || "-"}</p>
+                    <p><strong>Mjesto rođenja:</strong> {String(profilePerson.birthPlace || "").trim() || "-"}</p>
+                    <p><strong>Mjesto ukopa:</strong> {String(profilePerson.burialPlace || "").trim() || "-"}</p>
                   </div>
 
                   <div className="tree-info-card">
@@ -1065,6 +1331,8 @@ const TreeView = ({
 };
 
 export default TreeView;
+
+
 
 
 

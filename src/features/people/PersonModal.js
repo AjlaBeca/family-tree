@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Save, Trash2, Plus, Pencil, Upload } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Save, Trash2, Plus, Pencil, Upload, ChevronDown } from "lucide-react";
 
 const PersonModal = ({
   isOpen,
@@ -17,6 +17,7 @@ const PersonModal = ({
 }) => {
   const [tagSelections, setTagSelections] = useState([]);
   const [tagDraft, setTagDraft] = useState("");
+  const [tagDraftError, setTagDraftError] = useState("");
   const [healthDraft, setHealthDraft] = useState({
     hereditaryConditions: "",
     riskFactors: "",
@@ -25,11 +26,16 @@ const PersonModal = ({
   const [formError, setFormError] = useState("");
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [photoSource, setPhotoSource] = useState("");
+  const [photoFileName, setPhotoFileName] = useState("");
   const [photoFrame, setPhotoFrame] = useState({
     zoom: 1,
     offsetX: 0,
     offsetY: 0,
   });
+  const [openDropdown, setOpenDropdown] = useState("");
+  const prevPersonIdRef = useRef(null);
+  const prevOpenRef = useRef(false);
+  const dropdownRootRef = useRef(null);
 
   useEffect(() => {
     setTagSelections(selectedTagIds || []);
@@ -45,13 +51,41 @@ const PersonModal = ({
 
   useEffect(() => {
     setFormError("");
+    setTagDraftError("");
   }, [isOpen, person?.id]);
 
   useEffect(() => {
-    setPhotoEditorOpen(false);
-    setPhotoSource(String(person?.photo || ""));
-    setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
-  }, [person?.id, person?.photo]);
+    const currentPersonId = person?.id || null;
+    const personChanged = prevPersonIdRef.current !== currentPersonId;
+    const openedNow = Boolean(isOpen) && !prevOpenRef.current;
+
+    if (personChanged || openedNow) {
+      setPhotoEditorOpen(false);
+      setPhotoSource(String(person?.photo || ""));
+      setPhotoFileName("");
+      setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
+    }
+
+    prevPersonIdRef.current = currentPersonId;
+    prevOpenRef.current = Boolean(isOpen);
+  }, [isOpen, person?.id, person?.photo]);
+
+  useEffect(() => {
+    const onDocumentPointerDown = (event) => {
+      if (!dropdownRootRef.current?.contains(event.target)) {
+        setOpenDropdown("");
+      }
+    };
+    const onDocumentKeyDown = (event) => {
+      if (event.key === "Escape") setOpenDropdown("");
+    };
+    document.addEventListener("pointerdown", onDocumentPointerDown);
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
+      document.removeEventListener("keydown", onDocumentKeyDown);
+    };
+  }, []);
 
   if (!isOpen || !person) return null;
 
@@ -207,24 +241,65 @@ const PersonModal = ({
     const spouse = Number(person.spouse || 0);
 
     if (!(person.name || "").trim()) return "Ime je obavezno.";
-    if (personId && parent === personId) return "Roditelj 1 ne može biti ista osoba.";
-    if (personId && parent2 === personId) return "Roditelj 2 ne može biti ista osoba.";
+    if (personId && parent === personId) return "Otac ne može biti ista osoba.";
+    if (personId && parent2 === personId) return "Majka ne može biti ista osoba.";
     if (parent && parent2 && parent === parent2) {
-      return "Roditelj 1 i Roditelj 2 moraju biti različite osobe.";
+      return "Otac i majka moraju biti različite osobe.";
     }
     if (personId && spouse === personId) return "Supružnik ne može biti ista osoba.";
     if (isDescendantParentChoice(parent)) {
-      return "Neispravna veza: Roditelj 1 je potomak ove osobe (ciklus).";
+      return "Neispravna veza: Otac je potomak ove osobe (ciklus).";
     }
     if (isDescendantParentChoice(parent2)) {
-      return "Neispravna veza: Roditelj 2 je potomak ove osobe (ciklus).";
+      return "Neispravna veza: Majka je potomak ove osobe (ciklus).";
     }
     return "";
   };
 
+  const renderPersonDropdown = ({ keyName, value, options, onSelect, ariaLabel }) => {
+    const selected = options.find((option) => String(option.value) === String(value));
+    const label = selected?.label || options[0]?.label || "";
+    return (
+      <div className="person-dropdown">
+        <button
+          type="button"
+          className="person-dropdown-trigger"
+          aria-label={ariaLabel}
+          aria-haspopup="listbox"
+          aria-expanded={openDropdown === keyName}
+          onClick={() => setOpenDropdown((prev) => (prev === keyName ? "" : keyName))}
+        >
+          <span>{label}</span>
+          <ChevronDown className={`person-dropdown-chevron ${openDropdown === keyName ? "is-open" : ""}`} />
+        </button>
+        {openDropdown === keyName && (
+          <div className="person-dropdown-menu" role="listbox" aria-label={`${ariaLabel} opcije`}>
+            {options.map((option) => (
+              <button
+                key={`${keyName}-${option.value}`}
+                type="button"
+                role="option"
+                aria-selected={String(option.value) === String(value)}
+                className={`person-dropdown-option ${
+                  String(option.value) === String(value) ? "is-selected" : ""
+                }`}
+                onClick={() => {
+                  onSelect(option.value);
+                  setOpenDropdown("");
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="modal-backdrop">
-      <div className="modal">
+      <div className="modal person-modal" ref={dropdownRootRef}>
         <div className="modal-header">
           <h2>{editMode ? "Uredi osobu" : "Dodaj novu osobu"}</h2>
           <button onClick={onClose} className="btn-icon">
@@ -235,7 +310,7 @@ const PersonModal = ({
         <div className="modal-body">
           {formError && <div className="form-alert">{formError}</div>}
 
-          <div className="modal-row">
+          <div className="modal-row person-core-row">
             <label>
               Ime
               <input
@@ -247,17 +322,17 @@ const PersonModal = ({
 
             <label>
               Spol
-              <select
-                value={person.gender}
-                onChange={(e) => update({ gender: e.target.value })}
-              >
-                <option value="M">Muško</option>
-                <option value="F">Žensko</option>
-              </select>
+              {renderPersonDropdown({
+                keyName: "gender",
+                value: String(person.gender || "M"),
+                options: [
+                  { value: "M", label: "Muško" },
+                  { value: "F", label: "Žensko" },
+                ],
+                onSelect: (nextGender) => update({ gender: String(nextGender) }),
+                ariaLabel: "Spol",
+              })}
             </label>
-          </div>
-
-          <div className="modal-row">
             <label>
               Godina rođenja
               <input
@@ -266,7 +341,9 @@ const PersonModal = ({
                 onChange={(e) => update({ birthYear: e.target.value })}
               />
             </label>
+          </div>
 
+          <div className="modal-row person-core-row">
             <label>
               Godina smrti (opciono)
               <input
@@ -279,62 +356,87 @@ const PersonModal = ({
 
           <div className="modal-row">
             <label>
-              Roditelj 1
-              <select
-                value={person.parent}
-                onChange={(e) => update({ parent: parseInt(e.target.value, 10) })}
-              >
-                <option value={0}>Nema</option>
-                {people
-                  .filter((p) => p.id !== person.id)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
+              Zanimanje (opciono)
+              <input
+                type="text"
+                value={person.occupation || ""}
+                onChange={(e) => update({ occupation: e.target.value })}
+              />
             </label>
 
             <label>
-              Roditelj 2
-              <select
-                value={person.parent2 || 0}
-                onChange={(e) => update({ parent2: parseInt(e.target.value, 10) })}
-              >
-                <option value={0}>Nema</option>
-                {people
-                  .filter((p) => p.id !== person.id)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
+              Mjesto rođenja (opciono)
+              <input
+                type="text"
+                value={person.birthPlace || ""}
+                onChange={(e) => update({ birthPlace: e.target.value })}
+              />
             </label>
           </div>
 
-          <div className="modal-row">
+          <div className="modal-row person-core-row">
             <label>
+              Mjesto ukopa (opciono)
+              <input
+                type="text"
+                value={person.burialPlace || ""}
+                onChange={(e) => update({ burialPlace: e.target.value })}
+              />
+            </label>
+            <label>
+              Otac
+              {renderPersonDropdown({
+                keyName: "parent1",
+                value: String(person.parent || 0),
+                options: [
+                  { value: "0", label: "Nema" },
+                  ...people
+                    .filter((p) => p.id !== person.id)
+                    .map((p) => ({ value: String(p.id), label: p.name })),
+                ],
+                onSelect: (nextParent) => update({ parent: parseInt(nextParent, 10) }),
+                ariaLabel: "Otac",
+              })}
+            </label>
+
+            <label>
+              Majka
+              {renderPersonDropdown({
+                keyName: "parent2",
+                value: String(person.parent2 || 0),
+                options: [
+                  { value: "0", label: "Nema" },
+                  ...people
+                    .filter((p) => p.id !== person.id)
+                    .map((p) => ({ value: String(p.id), label: p.name })),
+                ],
+                onSelect: (nextParent2) => update({ parent2: parseInt(nextParent2, 10) }),
+                ariaLabel: "Majka",
+              })}
+            </label>
+          </div>
+
+          <div className="modal-row person-core-row">
+            <label className="person-spouse-field">
               Supružnik
-              <select
-                value={person.spouse || 0}
-                onChange={(e) => {
-                  const spouseId = parseInt(e.target.value, 10);
+              {renderPersonDropdown({
+                keyName: "spouse",
+                value: String(person.spouse || 0),
+                options: [
+                  { value: "0", label: "Nema" },
+                  ...people
+                    .filter((p) => p.id !== person.id)
+                    .map((p) => ({ value: String(p.id), label: p.name })),
+                ],
+                onSelect: (nextSpouse) => {
+                  const spouseId = parseInt(nextSpouse, 10);
                   update({
                     spouse: spouseId,
                     divorced: spouseId ? person.divorced || 0 : 0,
                   });
-                }}
-              >
-                <option value={0}>Nema</option>
-                {people
-                  .filter((p) => p.id !== person.id)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
+                },
+                ariaLabel: "Supružnik",
+              })}
               <div className="inline-check">
                 <input
                   type="checkbox"
@@ -346,7 +448,7 @@ const PersonModal = ({
               </div>
             </label>
 
-            <label>
+            <label className="person-bio-field">
               Biografija (opciono)
               <textarea
                 value={person.bio}
@@ -438,14 +540,24 @@ const PersonModal = ({
                 type="text"
                 placeholder="Nova oznaka"
                 value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
+                onChange={(e) => {
+                  setTagDraft(e.target.value);
+                  if (tagDraftError) setTagDraftError("");
+                }}
               />
               <button
                 type="button"
                 className="btn-ghost small"
                 onClick={async () => {
                   const name = tagDraft.trim();
-                  if (!name || !onCreateTag) return;
+                  if (!name) {
+                    setTagDraftError("Unesi naziv oznake prije dodavanja.");
+                    return;
+                  }
+                  if (!onCreateTag) {
+                    setTagDraftError("Dodavanje oznaka trenutno nije dostupno.");
+                    return;
+                  }
                   const tag = await onCreateTag(name);
                   if (tag?.id) {
                     setTagSelections((prev) =>
@@ -453,12 +565,14 @@ const PersonModal = ({
                     );
                   }
                   setTagDraft("");
+                  setTagDraftError("");
                 }}
               >
                 <Plus className="w-4 h-4" />
                 Dodaj
               </button>
             </div>
+            {tagDraftError && <p className="tag-input-error">{tagDraftError}</p>}
             <div className="tag-list">
               {(tags || []).length === 0 && (
                 <p className="muted-text">Nema oznaka.</p>
@@ -485,11 +599,40 @@ const PersonModal = ({
           <div className="modal-row modal-row-single">
             <label>
               Dodaj fotografiju (opciono)
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handlePhotoUpload(e.target.files && e.target.files[0])}
-              />
+              <div className="photo-picker-row">
+                <label className="file-picker">
+                  <span className="file-picker-btn">Odaberi fotografiju</span>
+                  <span className="file-picker-name">
+                    {photoFileName || "Nijedna fotografija nije odabrana"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      setPhotoFileName(file?.name || "");
+                      handlePhotoUpload(file);
+                    }}
+                  />
+                </label>
+                {Boolean(person.photo) && (
+                  <button
+                    type="button"
+                    className="btn-danger small photo-remove-btn"
+                    onClick={() => {
+                      setPhotoEditorOpen(false);
+                      setPhotoSource("");
+                      setPhotoFileName("");
+                      setPhotoFrame({ zoom: 1, offsetX: 0, offsetY: 0 });
+                      update({ photo: "" });
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Obrisi profilnu
+                  </button>
+                )}
+              </div>
             </label>
           </div>
 

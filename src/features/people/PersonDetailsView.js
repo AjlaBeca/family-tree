@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Pencil, X } from "lucide-react";
+import { ArrowLeft, Pencil, X, Briefcase, MapPin } from "lucide-react";
 import { api, getApiErrorMessage } from "../../services/api";
 
 const clean = (value, fallback = "-") => {
@@ -213,7 +213,6 @@ const PersonDetailsView = ({
       <div className="page-header">
         <div>
           <h2>{clean(person.name, "Bez imena")}</h2>
-          <p className="muted-text">{lifeLabel(person)}</p>
         </div>
         <div className="gallery-top-actions">
           <button type="button" className="btn-ghost" onClick={onBackToTree}>
@@ -246,15 +245,33 @@ const PersonDetailsView = ({
           </div>
         )}
         <div className="person-details-hero-meta">
-          <p className="muted-text">{lifeLabel(person)}</p>
-          <span className={`pill ${person.gender === "F" ? "pink" : "blue"}`}>
-            {person.gender === "F" ? "Žensko" : "Muško"}
-          </span>
-          <p className="muted-text">{clean(person.bio, "Bez biografije.")}</p>
+          <div className="person-hero-top">
+            <h3>{clean(person.name, "Bez imena")}</h3>
+            <p className="muted-text">{lifeLabel(person)}</p>
+          </div>
+          <div className="person-hero-pills">
+            <span className={`pill ${person.gender === "F" ? "pink" : "blue"}`}>
+              {person.gender === "F" ? "Zensko" : "Musko"}
+            </span>
+            <span className={`pill ${person.isPinned ? "blue" : "pink"}`}>
+              {person.isPinned ? "Pinovan clan" : "Obican clan"}
+            </span>
+          </div>
+          <div className="person-hero-facts">
+            <p>
+              <Briefcase className="w-4 h-4" />
+              <span>{clean(person.occupation, "Zanimanje nije uneseno")}</span>
+            </p>
+            <p>
+              <MapPin className="w-4 h-4" />
+              <span>{clean(person.birthPlace, "Mjesto rođenja nije uneseno")}</span>
+            </p>
+          </div>
+          <p className="muted-text person-hero-bio">{clean(person.bio, "Bez biografije.")}</p>
         </div>
       </div>
 
-      <div className="card chart-card">
+      <div className="card chart-card person-mini-card person-tagged-card person-section-tagged">
         <h3>Tagged photos</h3>
         {taggedPreview.length === 0 ? (
           <p className="muted-text">Nema tagged fotografija.</p>
@@ -286,30 +303,65 @@ const PersonDetailsView = ({
         {taggedPhotosError && <p className="muted-text" style={{ color: "#b91c1c" }}>{taggedPhotosError}</p>}
       </div>
 
-      <div className="stats-grid-2">
-        <div className="card chart-card">
+      <div className="stats-grid-2 person-mini-grid">
+        <div className="card chart-card person-mini-card person-section-basic">
           <h3>Osnovno</h3>
-          <p><strong>Spol:</strong> {person.gender === "F" ? "Žensko" : "Muško"}</p>
-          <p><strong>Pin:</strong> {person.isPinned ? "Da" : "Ne"}</p>
-          <p><strong>Roditelj 1:</strong> {clean(parent1?.name)}</p>
-          <p><strong>Supružnik:</strong> {clean(spouse?.name)}</p>
-          <p><strong>Roditelj 2:</strong> {clean(parent2?.name)}</p>
+          <div className="person-kv-list">
+            <div className="person-kv-row">
+              <span className="person-kv-label">Spol</span>
+              <span className="person-kv-value">{person.gender === "F" ? "Zensko" : "Musko"}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Pin</span>
+              <span className="person-kv-value">{person.isPinned ? "Da" : "Ne"}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Zanimanje</span>
+              <span className="person-kv-value">{clean(person.occupation)}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Mjesto rođenja</span>
+              <span className="person-kv-value">{clean(person.birthPlace)}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Mjesto ukopa</span>
+              <span className="person-kv-value">{clean(person.burialPlace)}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Otac</span>
+              <span className="person-kv-value">{clean(parent1?.name)}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Supruznik</span>
+              <span className="person-kv-value">{clean(spouse?.name)}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Majka</span>
+              <span className="person-kv-value">{clean(parent2?.name)}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="card chart-card">
+        <div className="card chart-card person-mini-card person-section-health">
           <h3>Zdravlje</h3>
-          <p><strong>Rizični faktori:</strong> {clean(health?.riskFactors)}</p>
-
-
-          <p><strong>Napomene:</strong> {clean(health?.notes)}</p>
+          <div className="person-kv-list">
+            <div className="person-kv-row">
+              <span className="person-kv-label">Rizicni faktori</span>
+              <span className="person-kv-value">{clean(health?.riskFactors)}</span>
+            </div>
+            <div className="person-kv-row">
+              <span className="person-kv-label">Napomene</span>
+              <span className="person-kv-value">{clean(health?.notes)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="stats-grid-2">
-        <div className="card chart-card">
+        <div className="card chart-card person-panel person-section-tags">
           <h3>Oznake</h3>
           {tagNames.length === 0 ? (
-            <p className="muted-text">Nema oznaka.</p>
+            <p className="muted-text person-empty-state">Nema oznaka.</p>
           ) : (
             <div className="gallery-tag-pills">
               {tagNames.map((name) => (
@@ -319,10 +371,10 @@ const PersonDetailsView = ({
           )}
         </div>
 
-        <div className="card chart-card">
+        <div className="card chart-card person-panel person-section-children">
           <h3>Djeca</h3>
           {children.length === 0 ? (
-            <p className="muted-text">Nema djece.</p>
+            <p className="muted-text person-empty-state">Nema djece.</p>
           ) : (
             <div className="list compact-list">
               {children.map((child) => (
@@ -336,10 +388,10 @@ const PersonDetailsView = ({
         </div>
       </div>
 
-      <div className="card chart-card">
+      <div className="card chart-card person-panel person-section-relations">
         <h3>Veze kroz vrijeme</h3>
         {relationRows.length === 0 ? (
-          <p className="muted-text">Nema veza.</p>
+          <p className="muted-text person-empty-state">Nema veza.</p>
         ) : (
           <div className="list compact-list">
             {relationRows.map((row) => (
@@ -383,3 +435,9 @@ const PersonDetailsView = ({
 };
 
 export default PersonDetailsView;
+
+
+
+
+
+

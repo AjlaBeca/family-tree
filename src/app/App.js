@@ -103,7 +103,7 @@ const FamilyTreeApp = () => {
         setFocusPersonId(null);
       }
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu uÃ„Âitati porodice."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu ucitati porodice."));
     } finally {
       setLoading(false);
     }
@@ -118,7 +118,7 @@ const FamilyTreeApp = () => {
       const mapped = data.map((p) => ({ ...p, key: p.id }));
       setPeople(sanitizePeople(mapped));
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu uÃ„Âitati osobe."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu ucitati osobe."));
     } finally {
       setLoading(false);
     }
@@ -132,7 +132,7 @@ const FamilyTreeApp = () => {
       const data = await api(`/api/tags?familyId=${familyId}`);
       setTags(data);
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu uÃ„Âitati oznake."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu ucitati oznake."));
     } finally {
       setLoading(false);
     }
@@ -146,7 +146,7 @@ const FamilyTreeApp = () => {
       const data = await api(`/api/tag-links?familyId=${familyId}`);
       setTagLinks(data);
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu uÃ„Âitati oznake osoba."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu ucitati oznake osoba."));
     } finally {
       setLoading(false);
     }
@@ -160,7 +160,7 @@ const FamilyTreeApp = () => {
       const data = await api(`/api/relationships?familyId=${familyId}`);
       setRelationships(data);
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu uÃ„Âitati veze."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu ucitati veze."));
     } finally {
       setLoading(false);
     }
@@ -178,7 +178,7 @@ const FamilyTreeApp = () => {
       });
       setPersonHealthMap(nextMap);
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu uÃ„Âitati zdravstvene podatke."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu ucitati zdravstvene podatke."));
     } finally {
       setLoading(false);
     }
@@ -243,6 +243,9 @@ const FamilyTreeApp = () => {
       gender: "M",
       birthYear: "",
       deathYear: "",
+      birthPlace: "",
+      occupation: "",
+      burialPlace: "",
       photo: "",
       bio: "",
       parent: 0,
@@ -358,7 +361,7 @@ const FamilyTreeApp = () => {
       setShowModal(false);
       setSelectedPerson(null);
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu saÃ„Âuvati osobu."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu sacuvati osobu."));
     } finally {
       setLoading(false);
     }
@@ -368,7 +371,7 @@ const FamilyTreeApp = () => {
     if (!selectedPerson?.id) return;
     const ok = await requestConfirm({
       title: "Obriši osobu",
-      message: "Jeste li sigurni da Å¾elite obrisati ovu osobu?",
+      message: "Jeste li sigurni da zelite obrisati ovu osobu?",
       confirmLabel: "Obriši",
       isDanger: true,
     });
@@ -516,7 +519,7 @@ const FamilyTreeApp = () => {
       });
       await loadRelationships(activeFamilyId);
     } catch (err) {
-      setErrorMessage(getApiErrorMessage(err, "Ne mogu saÃ„Âuvati vezu."));
+      setErrorMessage(getApiErrorMessage(err, "Ne mogu sacuvati vezu."));
     } finally {
       setLoading(false);
     }
@@ -561,14 +564,6 @@ const FamilyTreeApp = () => {
   const searchBasePeople = useMemo(
     () => (searchPinnedOnly ? peopleWithMeta.filter((p) => p.isPinned) : peopleWithMeta),
     [peopleWithMeta, searchPinnedOnly]
-  );
-
-  const filteredPeople = useMemo(
-    () =>
-      searchBasePeople.filter((p) =>
-        (p.name || "").toLowerCase().includes(searchTerm.toLowerCase())
-      ),
-    [searchBasePeople, searchTerm]
   );
 
   const statsSourcePeople = useMemo(
@@ -657,7 +652,7 @@ const FamilyTreeApp = () => {
 
       <main className="content">
         {errorMessage && <div className="alert">{errorMessage}</div>}
-        {loading && <div className="loading">UÃ„Âitavanje...</div>}
+        {loading && <div className="loading">Ucitavanje...</div>}
 
         {activeTab === "tree" && (
           <TreeView
@@ -736,7 +731,9 @@ const FamilyTreeApp = () => {
             onSearchChange={setSearchTerm}
             pinnedOnly={searchPinnedOnly}
             onPinnedOnlyChange={setSearchPinnedOnly}
-            filteredPeople={filteredPeople}
+            people={searchBasePeople}
+            tags={tags}
+            tagLinks={tagLinks}
             onSelectPerson={openPersonEditor}
             families={families}
             activeFamilyId={activeFamilyId}
@@ -816,6 +813,7 @@ const FamilyTreeApp = () => {
 };
 
 export default FamilyTreeApp;
+
 
 
 
