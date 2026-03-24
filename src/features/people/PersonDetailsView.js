@@ -349,6 +349,14 @@ const PersonDetailsView = ({
                 <span className="person-kv-value">{clean(person.birthPlace)}</span>
               </div>
               <div className="person-kv-row">
+                <span className="person-kv-label">Djevojacko prezime</span>
+                <span className="person-kv-value">{clean(person.maidenName)}</span>
+              </div>
+              <div className="person-kv-row">
+                <span className="person-kv-label">Zadrzano nakon braka</span>
+                <span className="person-kv-value">{person.keptMaidenName ? "Da" : "Ne"}</span>
+              </div>
+              <div className="person-kv-row">
                 <span className="person-kv-label">Mjesto ukopa</span>
                 <span className="person-kv-value">{clean(person.burialPlace)}</span>
               </div>
@@ -489,6 +497,7 @@ const PersonDetailsView = ({
 };
 
 export default PersonDetailsView;
+
 
 
 

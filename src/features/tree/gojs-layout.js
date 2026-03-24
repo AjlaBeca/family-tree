@@ -230,9 +230,182 @@ const computePositions = (people) => {
   return positions;
 };
 
-export const applyManualLayout = (diagram, people, go) => {
+const computeRelativeLevels = (people, focusPersonId) => {
+  const focusId = Number(focusPersonId || 0);
+  if (!focusId) return new Map();
+  const byKey = new Map(people.map((p) => [Number(p.key), p]));
+  if (!byKey.has(focusId)) return new Map();
+
+  const childrenByParent = new Map();
+  people.forEach((person) => {
+    const childId = Number(person.key);
+    const p1 = Number(person.parent || 0);
+    const p2 = Number(person.parent2 || 0);
+    if (p1 && byKey.has(p1)) {
+      if (!childrenByParent.has(p1)) childrenByParent.set(p1, []);
+      childrenByParent.get(p1).push(childId);
+    }
+    if (p2 && byKey.has(p2)) {
+      if (!childrenByParent.has(p2)) childrenByParent.set(p2, []);
+      childrenByParent.get(p2).push(childId);
+    }
+  });
+
+  const levels = new Map();
+  const queue = [focusId];
+  levels.set(focusId, 0);
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const person = byKey.get(current);
+    if (!person) continue;
+    const currentLevel = levels.get(current) || 0;
+
+    const parents = [Number(person.parent || 0), Number(person.parent2 || 0)].filter(
+      (pid) => pid && byKey.has(pid)
+    );
+    parents.forEach((parentId) => {
+      const candidateLevel = currentLevel - 1;
+      if (!levels.has(parentId) || candidateLevel < levels.get(parentId)) {
+        levels.set(parentId, candidateLevel);
+        queue.push(parentId);
+      }
+    });
+
+    const children = childrenByParent.get(current) || [];
+    children.forEach((childId) => {
+      const candidateLevel = currentLevel + 1;
+      if (!levels.has(childId) || candidateLevel > levels.get(childId)) {
+        levels.set(childId, candidateLevel);
+        queue.push(childId);
+      }
+    });
+  }
+
+  return levels;
+};
+
+const applyFocusedRowAlignment = (positions, people, focusPersonId) => {
+  const focusId = Number(focusPersonId || 0);
+  if (!focusId || !positions.has(focusId)) return positions;
+  const levels = computeRelativeLevels(people, focusId);
+  if (levels.size === 0) return positions;
+  const childrenByParent = new Map();
+  const parentsByChild = new Map();
+  people.forEach((person) => {
+    const id = Number(person.key);
+    const p1 = Number(person.parent || 0);
+    const p2 = Number(person.parent2 || 0);
+    const parentIds = [p1, p2].filter((pid, idx, arr) => pid && arr.indexOf(pid) === idx);
+    parentsByChild.set(id, parentIds);
+    parentIds.forEach((parentId) => {
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId).push(id);
+    });
+  });
+
+  const rows = new Map();
+  people.forEach((person) => {
+    const id = Number(person.key);
+    if (!levels.has(id)) return;
+    const level = levels.get(id);
+    const list = rows.get(level) || [];
+    list.push(id);
+    rows.set(level, list);
+  });
+
+  const next = new Map(positions);
+  const focusX = positions.get(focusId)?.x || 0;
+  const rowGap = TREE_NODE_HEIGHT + TREE_LAYER_GAP;
+  const colGap = TREE_NODE_WIDTH + Math.max(TREE_CLUSTER_GAP, TREE_SPOUSE_GAP);
+  const sortedLevels = Array.from(rows.keys()).sort((a, b) => a - b);
+  const minLevel = sortedLevels.length > 0 ? sortedLevels[0] : 0;
+  const maxLevel = sortedLevels.length > 0 ? sortedLevels[sortedLevels.length - 1] : 0;
+
+  const arrangeRow = (level, getAnchorX) => {
+    const ids = (rows.get(level) || []).slice();
+    if (ids.length === 0) return;
+    const placed = ids.map((id) => {
+      const fallback = next.get(id)?.x ?? positions.get(id)?.x ?? 0;
+      const anchor = Number.isFinite(getAnchorX(id)) ? getAnchorX(id) : fallback;
+      return { id, fallback, anchor, x: anchor };
+    });
+
+    placed.sort((a, b) => {
+      if (a.anchor !== b.anchor) return a.anchor - b.anchor;
+      return a.fallback - b.fallback;
+    });
+
+    for (let i = 1; i < placed.length; i += 1) {
+      placed[i].x = Math.max(placed[i].x, placed[i - 1].x + colGap);
+    }
+    for (let i = placed.length - 2; i >= 0; i -= 1) {
+      placed[i].x = Math.min(placed[i].x, placed[i + 1].x - colGap);
+    }
+
+    const meanAnchor =
+      placed.reduce((sum, row) => sum + row.anchor, 0) / Math.max(placed.length, 1);
+    const meanX = placed.reduce((sum, row) => sum + row.x, 0) / Math.max(placed.length, 1);
+    const centerShift = meanAnchor - meanX;
+    const y = 40 + (level - minLevel) * rowGap;
+
+    placed.forEach((row) => {
+      next.set(row.id, { x: row.x + centerShift, y });
+    });
+  };
+
+  arrangeRow(0, (id) => {
+    if (id === focusId) return focusX;
+    const parents = (parentsByChild.get(id) || []).filter((pid) => levels.get(pid) === -1);
+    const parentAnchors = parents
+      .map((pid) => next.get(pid)?.x ?? positions.get(pid)?.x)
+      .filter((x) => typeof x === "number");
+    if (parentAnchors.length > 0) {
+      return parentAnchors.reduce((sum, x) => sum + x, 0) / parentAnchors.length;
+    }
+    return positions.get(id)?.x ?? focusX;
+  });
+
+  for (let level = -1; level >= minLevel; level -= 1) {
+    arrangeRow(level, (id) => {
+      const children = (childrenByParent.get(id) || []).filter(
+        (childId) => levels.get(childId) === level + 1
+      );
+      const anchors = children
+        .map((childId) => next.get(childId)?.x ?? positions.get(childId)?.x)
+        .filter((x) => typeof x === "number");
+      if (anchors.length > 0) {
+        return anchors.reduce((sum, x) => sum + x, 0) / anchors.length;
+      }
+      return positions.get(id)?.x ?? focusX;
+    });
+  }
+
+  for (let level = 1; level <= maxLevel; level += 1) {
+    arrangeRow(level, (id) => {
+      const parents = (parentsByChild.get(id) || []).filter(
+        (parentId) => levels.get(parentId) === level - 1
+      );
+      const anchors = parents
+        .map((parentId) => next.get(parentId)?.x ?? positions.get(parentId)?.x)
+        .filter((x) => typeof x === "number");
+      if (anchors.length > 0) {
+        return anchors.reduce((sum, x) => sum + x, 0) / anchors.length;
+      }
+      return positions.get(id)?.x ?? focusX;
+    });
+  }
+
+  return next;
+};
+
+export const applyManualLayout = (diagram, people, go, options = {}) => {
   if (!diagram || !go) return;
-  const positions = computePositions(people);
+  const { focusPersonId = null, expandMode = "all" } = options || {};
+  let positions = computePositions(people);
+  if (focusPersonId && expandMode !== "all") {
+    positions = applyFocusedRowAlignment(positions, people, focusPersonId);
+  }
 
   diagram.startTransaction("manual-layout");
   positions.forEach((pos, key) => {

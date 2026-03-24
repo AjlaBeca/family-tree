@@ -91,6 +91,7 @@ const SearchView = ({
       const name = String(person.name || "").toLowerCase();
       const bio = String(person.bio || "").toLowerCase();
       const occupation = String(person.occupation || "").toLowerCase();
+      const maidenName = String(person.maidenName || "").toLowerCase();
       const primarySchool = String(person.primarySchool || "").toLowerCase();
       const secondarySchool = String(person.secondarySchool || "").toLowerCase();
       const studies = String(person.studies || "").toLowerCase();
@@ -103,6 +104,7 @@ const SearchView = ({
         !name.includes(query) &&
         !bio.includes(query) &&
         !occupation.includes(query) &&
+        !maidenName.includes(query) &&
         !primarySchool.includes(query) &&
         !secondarySchool.includes(query) &&
         !studies.includes(query) &&

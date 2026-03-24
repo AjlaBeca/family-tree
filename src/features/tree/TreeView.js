@@ -17,8 +17,6 @@ import { applyManualLayout } from "./gojs-layout";
 import {
   TREE_NODE_WIDTH,
   TREE_NODE_HEIGHT,
-  TREE_SPOUSE_CURVINESS,
-  TREE_SPOUSE_CURVE_DIR,
 } from "./tree-constants";
 import * as go from "gojs";
 
@@ -432,6 +430,22 @@ const getCardExtraText = (data, field) => {
   return data.gender === "F" ? "Zensko" : "Musko";
 };
 
+const clampLinkLane = (value) => {
+  const lane = Number(value);
+  if (!Number.isFinite(lane)) return 0;
+  return Math.max(-2, Math.min(2, Math.round(lane)));
+};
+
+const getFromLinkSegmentLength = (data) => {
+  const lane = clampLinkLane(data?.lane);
+  return Math.max(8, 18 + lane * 5);
+};
+
+const getToLinkSegmentLength = (data) => {
+  const lane = clampLinkLane(data?.lane);
+  return Math.max(8, 18 - lane * 5);
+};
+
 const TreeView = ({
   families,
   activeFamilyId,
@@ -480,7 +494,7 @@ const TreeView = ({
   const dropdownTypeaheadRef = useRef({ buffer: "", timer: null });
   const [profilePersonId, setProfilePersonId] = useState(null);
   const [cardView, setCardView] = useState("detailed");
-  const [cardExtraField, setCardExtraField] = useState("occupation");
+  const [cardExtraField, setCardExtraField] = useState("gender");
   const [cardExtraOpen, setCardExtraOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
@@ -497,8 +511,8 @@ const TreeView = ({
   const [profilePhotoFailed, setProfilePhotoFailed] = useState(false);
   const cardExtraOptions = useMemo(
     () => [
-      { value: "occupation", label: "Zanimanje" },
       { value: "gender", label: "Spol" },
+      { value: "occupation", label: "Zanimanje" },
       { value: "birthPlace", label: "Rođenje mjesto" },
     ],
     []
@@ -506,7 +520,7 @@ const TreeView = ({
 
   const selectedCardExtraLabel = useMemo(
     () =>
-      cardExtraOptions.find((option) => option.value === cardExtraField)?.label || "Zanimanje",
+      cardExtraOptions.find((option) => option.value === cardExtraField)?.label || "Spol",
     [cardExtraField, cardExtraOptions]
   );
 
@@ -819,9 +833,6 @@ const TreeView = ({
     diagram.commitTransaction("position-marriage");
 
     diagram.links.each((link) => {
-      if (link.category === "Spouse") {
-        link.curviness = TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR;
-      }
       link.invalidateRoute();
     });
   }, []);
@@ -840,7 +851,10 @@ const TreeView = ({
       });
       const model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
       existingDiagram.model = model;
-      applyManualLayout(existingDiagram, visibleRef.current, go);
+      applyManualLayout(existingDiagram, visibleRef.current, go, {
+        focusPersonId,
+        expandMode,
+      });
       setTimeout(() => positionMarriageNodes(existingDiagram), 0);
       return;
     }
@@ -865,6 +879,48 @@ const TreeView = ({
       if (!data || data.category) return;
       setProfilePersonId(data.id || data.key || null);
       if (onOpenDetailsRef.current) onOpenDetailsRef.current(data);
+    };
+
+    const setLinkHoverVisual = (link, isHover) => {
+      const path = link?.findObject("LINK_PATH");
+      if (!path) return;
+      const isSpouse = link?.data?.category === "Spouse";
+      if (isHover) {
+        path.stroke = isSpouse ? "#6d28d9" : "#2563eb";
+        path.strokeWidth = isSpouse ? 3.2 : 2.4;
+        return;
+      }
+      path.stroke = isSpouse ? "#7C3AED" : "#AEB7C7";
+      path.strokeWidth = isSpouse ? 2.6 : 1.6;
+    };
+
+    const setParentChildGroupHoverVisual = (link, isHover) => {
+      const category = String(link?.data?.category || "");
+      const sourceKey = link?.data?.from;
+      if (category !== "ParentChild" || sourceKey === undefined || sourceKey === null) {
+        setLinkHoverVisual(link, isHover);
+        return;
+      }
+
+      const sourceText = String(sourceKey);
+      diagram.links.each((candidate) => {
+        if (String(candidate?.data?.category || "") !== "ParentChild") return;
+        if (String(candidate?.data?.from) !== sourceText) return;
+        setLinkHoverVisual(candidate, isHover);
+      });
+
+      const sourceNode = diagram.findNodeForKey(sourceKey);
+      if (sourceNode?.data?.category !== "Marriage") return;
+      const spouses = Array.isArray(sourceNode.data.spouses) ? sourceNode.data.spouses : [];
+      if (spouses.length < 2) return;
+      const left = diagram.findNodeForKey(spouses[0]);
+      const right = diagram.findNodeForKey(spouses[1]);
+      if (!left || !right) return;
+      const linksBetween = left.findLinksBetween(right);
+      linksBetween.each((spouseLink) => {
+        if (String(spouseLink?.data?.category || "") !== "Spouse") return;
+        setLinkHoverVisual(spouseLink, isHover);
+      });
     };
 
     const diagram = $(go.Diagram, diagramRef.current, {
@@ -1062,14 +1118,21 @@ const TreeView = ({
       go.Link,
       {
         selectable: false,
-        pickable: false,
-        routing: go.Link.Orthogonal,
+        pickable: true,
+        routing: go.Link.AvoidsNodes,
+        curve: go.Link.None,
         corner: 0,
+        fromEndSegmentLength: 18,
+        toEndSegmentLength: 18,
         layerName: "Background",
         fromSpot: go.Spot.Bottom,
         toSpot: go.Spot.Top,
+        mouseEnter: (e, link) => setParentChildGroupHoverVisual(link, true),
+        mouseLeave: (e, link) => setParentChildGroupHoverVisual(link, false),
       },
-      $(go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
+      new go.Binding("fromEndSegmentLength", "", getFromLinkSegmentLength),
+      new go.Binding("toEndSegmentLength", "", getToLinkSegmentLength),
+      $(go.Shape, { name: "LINK_PATH", strokeWidth: 1.6, stroke: "#AEB7C7" })
     );
 
     diagram.linkTemplateMap.add(
@@ -1078,20 +1141,20 @@ const TreeView = ({
         go.Link,
         {
           selectable: false,
-          pickable: false,
+          pickable: true,
           routing: go.Link.Normal,
-          curve: go.Link.Bezier,
-          curviness: TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
-          computeCurviness: () => TREE_SPOUSE_CURVINESS * TREE_SPOUSE_CURVE_DIR,
+          curve: go.Link.None,
           fromSpot: go.Spot.RightSide,
           toSpot: go.Spot.LeftSide,
           fromEndSegmentLength: 10,
           toEndSegmentLength: 10,
           layerName: "Background",
+          mouseEnter: (e, link) => setLinkHoverVisual(link, true),
+          mouseLeave: (e, link) => setLinkHoverVisual(link, false),
         },
         $(
           go.Shape,
-          { strokeWidth: 2.6, stroke: "#7C3AED" },
+          { name: "LINK_PATH", strokeWidth: 2.6, stroke: "#7C3AED" },
           new go.Binding("strokeDashArray", "isDivorced", (value) =>
             value ? [8, 6] : null
           )
@@ -1105,13 +1168,20 @@ const TreeView = ({
         go.Link,
         {
           selectable: false,
-          pickable: false,
-          routing: go.Link.Orthogonal,
+          pickable: true,
+          routing: go.Link.AvoidsNodes,
+          curve: go.Link.None,
           corner: 0,
+          fromEndSegmentLength: 18,
+          toEndSegmentLength: 18,
           fromSpot: go.Spot.Bottom,
           toSpot: go.Spot.Top,
+          mouseEnter: (e, link) => setParentChildGroupHoverVisual(link, true),
+          mouseLeave: (e, link) => setParentChildGroupHoverVisual(link, false),
         },
-        $(go.Shape, { strokeWidth: 1.6, stroke: "#AEB7C7" })
+        new go.Binding("fromEndSegmentLength", "", getFromLinkSegmentLength),
+        new go.Binding("toEndSegmentLength", "", getToLinkSegmentLength),
+        $(go.Shape, { name: "LINK_PATH", strokeWidth: 1.6, stroke: "#AEB7C7" })
       )
     );
 
@@ -1129,9 +1199,12 @@ const TreeView = ({
     });
     const model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
     diagram.model = model;
-    applyManualLayout(diagram, visibleRef.current, go);
+    applyManualLayout(diagram, visibleRef.current, go, {
+      focusPersonId,
+      expandMode,
+    });
     setTimeout(() => positionMarriageNodes(diagram), 0);
-  }, [cardView, cardExtraField, positionMarriageNodes]);
+  }, [cardView, cardExtraField, positionMarriageNodes, focusPersonId, expandMode]);
 
   useEffect(() => {
     initDiagram();
@@ -1164,9 +1237,12 @@ const TreeView = ({
     });
     const model = new goRef.current.GraphLinksModel(nodeDataArray, linkDataArray);
     diagramInstanceRef.current.model = model;
-    applyManualLayout(diagramInstanceRef.current, projectedPeople, goRef.current);
+    applyManualLayout(diagramInstanceRef.current, projectedPeople, goRef.current, {
+      focusPersonId,
+      expandMode,
+    });
     setTimeout(() => positionMarriageNodes(diagramInstanceRef.current), 0);
-  }, [cardView, cardExtraField, projectedPeople, positionMarriageNodes]);
+  }, [cardView, cardExtraField, projectedPeople, positionMarriageNodes, focusPersonId, expandMode]);
 
   useEffect(() => {
     const diagram = diagramInstanceRef.current;
@@ -1194,9 +1270,12 @@ const TreeView = ({
     }
 
     diagram.requestUpdate();
-    applyManualLayout(diagram, projectedPeople, goRef.current);
+    applyManualLayout(diagram, projectedPeople, goRef.current, {
+      focusPersonId,
+      expandMode,
+    });
     setTimeout(() => positionMarriageNodes(diagram), 0);
-  }, [projectedPeople, positionMarriageNodes]);
+  }, [projectedPeople, positionMarriageNodes, focusPersonId, expandMode]);
 
   const zoomIn = () => {
     if (diagramInstanceRef.current) diagramInstanceRef.current.scale *= 1.2;
@@ -1214,7 +1293,10 @@ const TreeView = ({
     const diagram = diagramInstanceRef.current;
     const go = goRef.current;
     if (!diagram || !go) return;
-    applyManualLayout(diagram, visibleRef.current, go);
+    applyManualLayout(diagram, visibleRef.current, go, {
+      focusPersonId,
+      expandMode,
+    });
     positionMarriageNodes(diagram);
     diagram.zoomToFit();
   };
@@ -2074,6 +2156,8 @@ const TreeView = ({
                     <p><strong>Broj djece:</strong> {profileChildrenCount}</p>
                     <p><strong>Zanimanje:</strong> {String(profilePerson.occupation || "").trim() || "-"}</p>
                     <p><strong>Mjesto rođenja:</strong> {String(profilePerson.birthPlace || "").trim() || "-"}</p>
+                    <p><strong>Djevojacko prezime:</strong> {String(profilePerson.maidenName || "").trim() || "-"}</p>
+                    <p><strong>Zadrzano djevojacko:</strong> {profilePerson.keptMaidenName ? "Da" : "Ne"}</p>
                     <p><strong>Osnovna skola:</strong> {String(profilePerson.primarySchool || "").trim() || "-"}</p>
                     <p><strong>Srednja skola:</strong> {String(profilePerson.secondarySchool || "").trim() || "-"}</p>
                     <p><strong>Mjesto ukopa:</strong> {String(profilePerson.burialPlace || "").trim() || "-"}</p>
@@ -2170,6 +2254,7 @@ const TreeView = ({
 };
 
 export default TreeView;
+
 
 
 

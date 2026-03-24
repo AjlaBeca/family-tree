@@ -605,6 +605,29 @@ const PersonModal = ({
 
           <div className="modal-row">
             <label>
+              Djevojacko prezime
+              <input
+                type="text"
+                value={person.maidenName || ""}
+                onChange={(e) => update({ maidenName: e.target.value })}
+              />
+            </label>
+
+            <label>
+              <span>Opcija nakon braka</span>
+              <div className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(person.keptMaidenName)}
+                  onChange={(e) => update({ keptMaidenName: e.target.checked ? 1 : 0 })}
+                />
+                <span>Zadrzano djevojacko prezime nakon braka</span>
+              </div>
+            </label>
+          </div>
+
+          <div className="modal-row">
+            <label>
               Odsjek / stepen
               <input
                 type="text"

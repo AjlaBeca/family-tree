@@ -37,6 +37,8 @@ export const buildModelData = (people, options = {}) => {
   const nodeDataArray = [];
   const linkDataArray = [];
   const marriages = new Map();
+  const sourceLaneMap = new Map();
+  let laneCursor = 0;
   const keys = new Set(people.map((p) => p.key));
   const byKey = new Map(people.map((p) => [p.key, p]));
   const branchMemo = new Map();
@@ -139,6 +141,17 @@ export const buildModelData = (people, options = {}) => {
     return marriages.get(coupleId).key;
   };
 
+  const getLaneForParentSource = (fromKey) => {
+    const laneOrder = [0, -1, 1, -2, 2];
+    const key = String(fromKey || "");
+    if (!key) return 0;
+    if (sourceLaneMap.has(key)) return sourceLaneMap.get(key);
+    const lane = laneOrder[laneCursor % laneOrder.length];
+    laneCursor += 1;
+    sourceLaneMap.set(key, lane);
+    return lane;
+  };
+
   people.forEach((person) => {
     if (person.spouse && person.spouse !== person.key && keys.has(person.spouse)) {
       ensureMarriageNode(person.key, person.spouse, {
@@ -159,6 +172,7 @@ export const buildModelData = (people, options = {}) => {
         from: marriageKey,
         to: person.key,
         category: "ParentChild",
+        lane: getLaneForParentSource(marriageKey),
       });
       return;
     }
@@ -168,6 +182,7 @@ export const buildModelData = (people, options = {}) => {
         from: parent1,
         to: person.key,
         category: "ParentChild",
+        lane: getLaneForParentSource(parent1),
       });
       return;
     }
@@ -177,6 +192,7 @@ export const buildModelData = (people, options = {}) => {
         from: parent2,
         to: person.key,
         category: "ParentChild",
+        lane: getLaneForParentSource(parent2),
       });
     }
   });

@@ -34,6 +34,8 @@ const sanitizePerson = (person) => {
   cleaned.pinColor = cleaned.pinColor || "#f59e0b";
   cleaned.birthPlace = String(cleaned.birthPlace || "").trim();
   cleaned.occupation = String(cleaned.occupation || "").trim();
+  cleaned.maidenName = String(cleaned.maidenName || "").trim();
+  cleaned.keptMaidenName = cleaned.keptMaidenName ? 1 : 0;
   cleaned.primarySchool = String(cleaned.primarySchool || "").trim();
   cleaned.secondarySchool = String(cleaned.secondarySchool || "").trim();
   cleaned.studies = String(cleaned.studies || "").trim();
@@ -80,6 +82,8 @@ const normalizePersonInput = (body = {}, idOverride = 0) => {
     deathYear: toText(body.deathYear).trim(),
     birthPlace: toText(body.birthPlace).trim(),
     occupation: toText(body.occupation).trim(),
+    maidenName: toText(body.maidenName).trim(),
+    keptMaidenName: Number(body.keptMaidenName) ? 1 : 0,
     primarySchool: toText(body.primarySchool).trim(),
     secondarySchool: toText(body.secondarySchool).trim(),
     studies: toText(body.studies).trim(),
@@ -189,7 +193,7 @@ app.get("/api/people", async (req, res) => {
     const { familyId } = req.query;
     const params = [];
     let sql =
-      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, birth_place as birthPlace, occupation, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor FROM people";
+      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, birth_place as birthPlace, occupation, maiden_name as maidenName, kept_maiden_name as keptMaidenName, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor FROM people";
 
     if (familyId) {
       sql += " WHERE family_id = ?";
@@ -215,6 +219,8 @@ app.post("/api/people", async (req, res) => {
       deathYear,
       birthPlace,
       occupation,
+      maidenName,
+      keptMaidenName,
       primarySchool,
       secondarySchool,
       studies,
@@ -243,8 +249,8 @@ app.post("/api/people", async (req, res) => {
 
     const result = await run(
       `INSERT INTO people
-        (family_id, name, gender, birth_year, death_year, birth_place, occupation, primary_school, secondary_school, studies, faculty, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        (family_id, name, gender, birth_year, death_year, birth_place, occupation, maiden_name, kept_maiden_name, primary_school, secondary_school, studies, faculty, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       , [
         familyId,
         name,
@@ -253,6 +259,8 @@ app.post("/api/people", async (req, res) => {
         deathYear,
         birthPlace,
         occupation,
+        maidenName,
+        keptMaidenName ? 1 : 0,
         primarySchool,
         secondarySchool,
         studies,
@@ -271,7 +279,7 @@ app.post("/api/people", async (req, res) => {
 
     const person = await get(
       `SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear,
-        birth_place as birthPlace, occupation, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
+        birth_place as birthPlace, occupation, maiden_name as maidenName, kept_maiden_name as keptMaidenName, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
         FROM people WHERE id = ?`,
       [result.lastID]
     );
@@ -294,6 +302,8 @@ app.put("/api/people/:id", async (req, res) => {
       deathYear,
       birthPlace,
       occupation,
+      maidenName,
+      keptMaidenName,
       primarySchool,
       secondarySchool,
       studies,
@@ -323,7 +333,7 @@ app.put("/api/people/:id", async (req, res) => {
 
     await run(
       `UPDATE people
-        SET family_id = ?, name = ?, gender = ?, birth_year = ?, death_year = ?, birth_place = ?, occupation = ?, primary_school = ?, secondary_school = ?, studies = ?, faculty = ?, burial_place = ?, photo = ?, bio = ?, parent = ?, parent2 = ?, spouse = ?, divorced = ?, is_pinned = ?, pin_color = ?
+        SET family_id = ?, name = ?, gender = ?, birth_year = ?, death_year = ?, birth_place = ?, occupation = ?, maiden_name = ?, kept_maiden_name = ?, primary_school = ?, secondary_school = ?, studies = ?, faculty = ?, burial_place = ?, photo = ?, bio = ?, parent = ?, parent2 = ?, spouse = ?, divorced = ?, is_pinned = ?, pin_color = ?
         WHERE id = ?`,
       [
         familyId,
@@ -333,6 +343,8 @@ app.put("/api/people/:id", async (req, res) => {
         deathYear,
         birthPlace,
         occupation,
+        maidenName,
+        keptMaidenName ? 1 : 0,
         primarySchool,
         secondarySchool,
         studies,
@@ -352,7 +364,7 @@ app.put("/api/people/:id", async (req, res) => {
 
     const person = await get(
       `SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear,
-        birth_place as birthPlace, occupation, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
+        birth_place as birthPlace, occupation, maiden_name as maidenName, kept_maiden_name as keptMaidenName, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
         FROM people WHERE id = ?`,
       [personId]
     );
@@ -1115,8 +1127,8 @@ app.post("/api/people/import", async (req, res) => {
       if (!person.name) continue;
       const result = await run(
         `INSERT INTO people
-          (family_id, name, gender, birth_year, death_year, birth_place, occupation, primary_school, secondary_school, studies, faculty, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          (family_id, name, gender, birth_year, death_year, birth_place, occupation, maiden_name, kept_maiden_name, primary_school, secondary_school, studies, faculty, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         , [
           familyId,
           person.name,
@@ -1125,6 +1137,8 @@ app.post("/api/people/import", async (req, res) => {
           person.deathYear || "",
           person.birthPlace || "",
           person.occupation || "",
+          person.maidenName || "",
+          person.keptMaidenName ? 1 : 0,
           person.primarySchool || "",
           person.secondarySchool || "",
           person.studies || "",
@@ -1145,7 +1159,7 @@ app.post("/api/people/import", async (req, res) => {
 
     const rows = await all(
       `SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear,
-        birth_place as birthPlace, occupation, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
+        birth_place as birthPlace, occupation, maiden_name as maidenName, kept_maiden_name as keptMaidenName, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor
         FROM people WHERE family_id = ? ORDER BY id ASC`,
       [familyId]
     );
@@ -1168,7 +1182,7 @@ app.get("/api/export", async (req, res) => {
     if (!family) return res.status(404).json({ error: "Porodica nije pronađena." });
 
     const people = await all(
-      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, birth_place as birthPlace, occupation, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor, created_at as createdAt FROM people WHERE family_id = ? ORDER BY id ASC",
+      "SELECT id, family_id as familyId, name, gender, birth_year as birthYear, death_year as deathYear, birth_place as birthPlace, occupation, maiden_name as maidenName, kept_maiden_name as keptMaidenName, primary_school as primarySchool, secondary_school as secondarySchool, studies, faculty, burial_place as burialPlace, photo, bio, parent, parent2, spouse, divorced, is_pinned as isPinned, pin_color as pinColor, created_at as createdAt FROM people WHERE family_id = ? ORDER BY id ASC",
       [familyId]
     );
     const tags = await all(
@@ -1233,8 +1247,8 @@ app.post("/api/import/v2", async (req, res) => {
     for (const row of people) {
       const result = await run(
         `INSERT INTO people
-          (family_id, name, gender, birth_year, death_year, birth_place, occupation, primary_school, secondary_school, studies, faculty, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
+          (family_id, name, gender, birth_year, death_year, birth_place, occupation, maiden_name, kept_maiden_name, primary_school, secondary_school, studies, faculty, burial_place, photo, bio, parent, parent2, spouse, divorced, is_pinned, pin_color)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
         [
           familyId,
           row.name,
@@ -1243,6 +1257,8 @@ app.post("/api/import/v2", async (req, res) => {
           row.deathYear || "",
           row.birthPlace || "",
           row.occupation || "",
+          row.maidenName || "",
+          row.keptMaidenName ? 1 : 0,
           row.primarySchool || "",
           row.secondarySchool || "",
           row.studies || "",
