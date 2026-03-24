@@ -280,18 +280,19 @@
 .person-modal {
   width: min(1080px, 96vw);
   max-height: calc(100dvh - 10px);
-  gap: 8px;
-  padding: 12px 14px 10px;
+  gap: 10px;
+  padding: 14px 16px 12px;
 }
 
 .person-modal .modal-header h2 {
   margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.1;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
 }
 
 .person-modal .modal-body {
-  gap: 8px;
+  gap: 12px;
   min-height: 0;
   padding-right: 6px;
   padding-bottom: 20px;
@@ -299,20 +300,23 @@
 }
 
 .person-modal .modal-row {
-  gap: 8px;
+  gap: 10px;
 }
 
 .person-modal .modal-body label {
-  gap: 4px;
-  font-size: 0.8rem;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: var(--ink-700);
 }
 
 .person-modal .modal-body input,
 .person-modal .modal-body select,
 .person-modal .modal-body textarea {
-  padding: 7px 9px;
-  font-size: 0.88rem;
-  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 0.93rem;
+  border-radius: 11px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
 }
 
 .person-dropdown {
@@ -399,7 +403,7 @@
 
 .person-modal .modal-body input,
 .person-modal .modal-body select {
-  height: 36px;
+  height: 40px;
 }
 
 .person-modal .modal-body textarea {
@@ -410,7 +414,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.person-modal .person-bio-field {
+.person-modal .modal-row.person-core-row > .person-bio-field {
   grid-column: span 2;
 }
 
@@ -440,6 +444,73 @@
 .person-modal .tag-list {
   max-height: 64px;
   overflow-y: auto;
+}
+
+.person-partner-bio-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  gap: 8px;
+  width: 100%;
+  grid-column: 1 / -1;
+  align-items: stretch;
+}
+
+.person-partner-tags-col {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.person-partner-tags-col > label {
+  gap: 4px;
+}
+
+.person-partner-bio-row .person-bio-field {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  grid-column: auto;
+}
+
+.person-partner-bio-row .person-bio-label {
+  font-size: 0.8rem;
+  color: var(--ink-700);
+}
+
+.person-partner-bio-row .person-bio-field textarea {
+  margin-top: 0;
+  min-height: 214px;
+  max-height: 214px;
+}
+
+.person-inline-tag-input {
+  align-items: stretch;
+}
+
+.person-inline-tag-input .btn-ghost.small {
+  min-height: 36px;
+}
+
+.person-inline-tag-list {
+  max-height: 84px;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.person-selected-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.person-selected-tag-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0;
 }
 
 .person-modal .photo-preview {
@@ -543,6 +614,15 @@
   .person-modal .person-bio-field {
     grid-column: auto;
   }
+
+  .person-partner-bio-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .person-partner-bio-row .person-bio-field textarea {
+    min-height: 90px;
+    max-height: 90px;
+  }
 }
 
 @media (max-width: 860px) {
@@ -622,43 +702,55 @@
 
 .person-modal-hero {
   display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 10px;
-  align-items: start;
-  padding: 8px 10px 8px 6px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #f8fafc;
+  grid-template-columns: 130px 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 2px 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .person-modal-hero-photo-col {
   display: grid;
   gap: 8px;
-  align-content: start;
+  align-content: center;
   justify-items: start;
+  align-self: center;
 }
 
 .person-modal-hero-photo {
   position: relative;
-  width: 112px;
-  height: 112px;
+  width: 104px;
+  height: 104px;
   border-radius: 999px;
   overflow: hidden;
   border: 2px solid #ffffff;
   background: #111827;
   justify-self: start;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.14);
 }
 
 .person-modal-hero-photo .photo-edit-overlay {
-  top: 6px;
-  right: 6px;
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 999px;
+  background: rgba(31, 41, 55, 0.64);
+  display: grid;
+  place-items: center;
   opacity: 0;
   pointer-events: none;
   transform: scale(0.96);
   transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+}
+
+.person-modal-hero-photo .photo-edit-overlay svg {
+  color: #f8fafc;
 }
 
 .person-modal-hero-photo:hover .photo-edit-overlay,
@@ -669,7 +761,7 @@
 }
 
 .person-modal-hero-photo .photo-edit-overlay:hover {
-  background: #0f172a;
+  background: rgba(17, 24, 39, 0.78);
 }
 
 .person-modal-hero-photo img {
@@ -704,11 +796,36 @@
 
 .person-modal-hero-fields {
   display: grid;
-  gap: 7px;
+  gap: 10px;
 }
 
 .person-hero-core {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.person-hero-core > label {
+  align-items: start;
+  text-align: left;
+}
+
+.person-hero-core > label input {
+  text-align: left;
+}
+
+.person-hero-core .person-dropdown-trigger {
+  position: relative;
+  justify-content: flex-start;
+  padding-right: 28px;
+}
+
+.person-hero-core .person-dropdown-trigger > span {
+  width: 100%;
+  text-align: left;
+}
+
+.person-hero-core .person-dropdown-trigger .person-dropdown-chevron {
+  position: absolute;
+  right: 10px;
 }
 
 .person-life-line {
@@ -733,7 +850,7 @@
   display: none !important;
 }
 
-.person-modal .person-bio-field textarea {
+.person-modal .modal-row.person-core-row > .person-bio-field textarea {
   min-height: 78px;
   max-height: 78px;
   resize: none;

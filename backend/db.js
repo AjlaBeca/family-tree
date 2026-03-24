@@ -53,6 +53,8 @@ const init = async () => {
       death_year TEXT DEFAULT '',
       birth_place TEXT DEFAULT '',
       occupation TEXT DEFAULT '',
+      primary_school TEXT DEFAULT '',
+      secondary_school TEXT DEFAULT '',
       studies TEXT DEFAULT '',
       faculty TEXT DEFAULT '',
       burial_place TEXT DEFAULT '',
@@ -193,6 +195,12 @@ const init = async () => {
   }
   if (!(await columnExists("people", "occupation"))) {
     await run("ALTER TABLE people ADD COLUMN occupation TEXT DEFAULT ''");
+  }
+  if (!(await columnExists("people", "primary_school"))) {
+    await run("ALTER TABLE people ADD COLUMN primary_school TEXT DEFAULT ''");
+  }
+  if (!(await columnExists("people", "secondary_school"))) {
+    await run("ALTER TABLE people ADD COLUMN secondary_school TEXT DEFAULT ''");
   }
   if (!(await columnExists("people", "studies"))) {
     await run("ALTER TABLE people ADD COLUMN studies TEXT DEFAULT ''");

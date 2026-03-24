@@ -24,8 +24,6 @@ const FamilyTreeApp = () => {
   const [tagLinks, setTagLinks] = useState([]);
   const [personHealthMap, setPersonHealthMap] = useState({});
   const [relationships, setRelationships] = useState([]);
-  const [searchPinnedOnly, setSearchPinnedOnly] = useState(false);
-  const [statsPinnedOnly, setStatsPinnedOnly] = useState(false);
   const [activeTagId, setActiveTagId] = useState(0);
   const [focusPersonId, setFocusPersonId] = useState(null);
   const [expandMode, setExpandMode] = useState("both");
@@ -244,6 +242,8 @@ const FamilyTreeApp = () => {
       deathYear: "",
       birthPlace: "",
       occupation: "",
+      primarySchool: "",
+      secondarySchool: "",
       studies: "",
       faculty: "",
       burialPlace: "",
@@ -253,8 +253,6 @@ const FamilyTreeApp = () => {
       parent2: 0,
       spouse: 0,
       divorced: 0,
-      isPinned: 0,
-      pinColor: "#f59e0b",
     });
     setEditMode(false);
     setShowModal(true);
@@ -296,6 +294,8 @@ const FamilyTreeApp = () => {
         deathYear: toStringSafe(person?.deathYear).trim(),
         birthPlace: toStringSafe(person?.birthPlace).trim(),
         occupation: toStringSafe(person?.occupation).trim(),
+        primarySchool: toStringSafe(person?.primarySchool).trim(),
+        secondarySchool: toStringSafe(person?.secondarySchool).trim(),
         studies: toStringSafe(person?.studies).trim(),
         faculty: toStringSafe(person?.faculty).trim(),
         burialPlace: toStringSafe(person?.burialPlace).trim(),
@@ -305,8 +305,6 @@ const FamilyTreeApp = () => {
         parent2: toId(person?.parent2),
         spouse: toId(person?.spouse),
         divorced: toIntFlag(person?.divorced),
-        isPinned: toIntFlag(person?.isPinned),
-        pinColor: toStringSafe(person?.pinColor || "#f59e0b").trim() || "#f59e0b",
       };
     },
     [activeFamilyId]
@@ -610,15 +608,8 @@ const FamilyTreeApp = () => {
     [people, personHealthMap]
   );
 
-  const searchBasePeople = useMemo(
-    () => (searchPinnedOnly ? peopleWithMeta.filter((p) => p.isPinned) : peopleWithMeta),
-    [peopleWithMeta, searchPinnedOnly]
-  );
-
-  const statsSourcePeople = useMemo(
-    () => (statsPinnedOnly ? peopleWithMeta.filter((p) => p.isPinned) : peopleWithMeta),
-    [peopleWithMeta, statsPinnedOnly]
-  );
+  const searchBasePeople = useMemo(() => peopleWithMeta, [peopleWithMeta]);
+  const statsSourcePeople = useMemo(() => peopleWithMeta, [peopleWithMeta]);
 
   const stats = useMemo(() => {
     const living = statsSourcePeople.filter((p) => !p.deathYear).length;
@@ -761,8 +752,6 @@ const FamilyTreeApp = () => {
             key={`stats-${tabResetById.stats || 0}-${activeFamilyId || 0}`}
             stats={stats}
             people={statsSourcePeople}
-            pinnedOnly={statsPinnedOnly}
-            onPinnedOnlyChange={setStatsPinnedOnly}
             families={families}
             activeFamilyId={activeFamilyId}
             onFamilyChange={handleFamilyChange}
@@ -775,8 +764,6 @@ const FamilyTreeApp = () => {
             key={`search-${tabResetById.search || 0}-${activeFamilyId || 0}`}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            pinnedOnly={searchPinnedOnly}
-            onPinnedOnlyChange={setSearchPinnedOnly}
             people={searchBasePeople}
             tags={tags}
             tagLinks={tagLinks}
@@ -801,9 +788,6 @@ const FamilyTreeApp = () => {
               setSelectedProfilePersonId(person.id);
               setActiveTab("person");
             }}
-            onTogglePin={(person) =>
-              updatePersonQuick(person.id, { isPinned: person.isPinned ? 0 : 1 })
-            }
             onReplacePhoto={(person, photo) =>
               updatePersonQuick(person.id, { photo: photo || "" })
             }

@@ -72,20 +72,6 @@ const getCleanName = (name) => {
   return value || "Bez imena";
 };
 
-const formatCompactName = (name, max = 20) => {
-  const value = getCleanName(name);
-  if (value.length <= max) return value;
-  const parts = value.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    const first = parts[0];
-    const last = parts[parts.length - 1];
-    const short = `${first} ${last.charAt(0).toUpperCase()}.`;
-    if (short.length <= max) return short;
-  }
-  if (max <= 1) return value.slice(0, max);
-  return `${value.slice(0, max - 1)}...`;
-};
-
 const parseYear = (value) => {
   if (value === null || value === undefined) return null;
   const raw = String(value).trim();
@@ -442,9 +428,6 @@ const getCardExtraText = (data, field) => {
     if (data.healthBadge === "risk") return "Rizicni faktori";
     return "Bez oznake rizika";
   }
-  if (field === "pin") {
-    return data.isPinned ? "Pinovan clan" : "Nije pinovan";
-  }
   if (field === "none") return "";
   return data.gender === "F" ? "Zensko" : "Musko";
 };
@@ -491,6 +474,7 @@ const TreeView = ({
   const tagSelectRef = useRef(null);
   const familySelectRef = useRef(null);
   const moreOptionsRef = useRef(null);
+  const highlightSelectRef = useRef(null);
   const relationPersonARef = useRef(null);
   const relationPersonBRef = useRef(null);
   const dropdownTypeaheadRef = useRef({ buffer: "", timer: null });
@@ -502,8 +486,10 @@ const TreeView = ({
   const [tagOpen, setTagOpen] = useState(false);
   const [familyOpen, setFamilyOpen] = useState(false);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
+  const [highlightOpen, setHighlightOpen] = useState(false);
   const [yearMode, setYearMode] = useState("off");
   const [yearFilterInput, setYearFilterInput] = useState("");
+  const [highlightRule, setHighlightRule] = useState("off");
   const [relationPersonAId, setRelationPersonAId] = useState(0);
   const [relationPersonBId, setRelationPersonBId] = useState(0);
   const [relationPersonAOpen, setRelationPersonAOpen] = useState(false);
@@ -524,6 +510,22 @@ const TreeView = ({
     [cardExtraField, cardExtraOptions]
   );
 
+  const highlightOptions = useMemo(
+    () => [
+      { value: "off", label: "Bez isticanja" },
+      { value: "female", label: "Spol: zene" },
+      { value: "male", label: "Spol: muskarci" },
+      { value: "living", label: "Status: zivi" },
+      { value: "deceased", label: "Status: preminuli" },
+      { value: "photo", label: "Imaju fotografiju" },
+    ],
+    []
+  );
+  const selectedHighlightLabel = useMemo(
+    () => highlightOptions.find((option) => option.value === highlightRule)?.label || "Bez isticanja",
+    [highlightOptions, highlightRule]
+  );
+
   const openOnlyTreeDropdown = useCallback((keyName) => {
     setFamilyOpen(keyName === "family");
     setRelationPersonAOpen(keyName === "relationA");
@@ -531,6 +533,7 @@ const TreeView = ({
     setFocusOpen(keyName === "focus");
     setTagOpen(keyName === "tag");
     setCardExtraOpen(keyName === "cardExtra");
+    setHighlightOpen(keyName === "highlight");
     if (keyName !== "moreOptions") setMoreOptionsOpen(false);
   }, []);
 
@@ -573,39 +576,68 @@ const TreeView = ({
   const projectionYear = useMemo(() => parseYear(yearFilterInput), [yearFilterInput]);
 
   const projectedPeople = useMemo(() => {
-    if (!Number.isFinite(projectionYear) || yearMode === "off") return visiblePeople;
-    if (yearMode === "living") {
-      return visiblePeople.filter((person) => getPersonYearStatus(person, projectionYear) === "alive");
+    let basePeople = visiblePeople;
+    if (Number.isFinite(projectionYear) && yearMode === "living") {
+      basePeople = visiblePeople.filter((person) => getPersonYearStatus(person, projectionYear) === "alive");
     }
-    return visiblePeople.map((person) => {
-      const status = getPersonYearStatus(person, projectionYear);
-      if (status === "alive") {
-        return {
-          ...person,
-          cardStroke: "#15803d",
-          cardFill: "rgba(187, 247, 208, 0.55)",
+
+    return basePeople.map((person) => {
+      let decorated = person;
+      if (Number.isFinite(projectionYear) && yearMode === "status") {
+        const status = getPersonYearStatus(person, projectionYear);
+        if (status === "alive") {
+          decorated = {
+            ...decorated,
+            cardStroke: "#15803d",
+            cardFill: "rgba(187, 247, 208, 0.55)",
+            nodeOpacity: 1,
+          };
+        } else if (status === "dead") {
+          decorated = {
+            ...decorated,
+            cardStroke: "#b91c1c",
+            cardFill: "rgba(254, 202, 202, 0.52)",
+            nodeOpacity: 1,
+          };
+        } else if (status === "unborn") {
+          decorated = {
+            ...decorated,
+            cardStroke: "#94a3b8",
+            cardFill: "rgba(226, 232, 240, 0.72)",
+            nodeOpacity: 0.5,
+          };
+        }
+      }
+
+      const normalizedGender = String(person?.gender || "").toUpperCase();
+      const hasDeathYear = String(person?.deathYear ?? "").trim().length > 0;
+      const hasPhoto = String(person?.photo ?? "").trim().length > 0;
+      let shouldHighlight = false;
+      if (highlightRule === "female") shouldHighlight = normalizedGender === "F";
+      if (highlightRule === "male") shouldHighlight = normalizedGender === "M";
+      if (highlightRule === "living") shouldHighlight = !hasDeathYear;
+      if (highlightRule === "deceased") shouldHighlight = hasDeathYear;
+      if (highlightRule === "photo") shouldHighlight = hasPhoto;
+
+      if (highlightRule !== "off" && shouldHighlight) {
+        decorated = {
+          ...decorated,
+          cardStroke: "#ca8a04",
+          cardFill: "hsla(48, 96%, 70%, 0.35)",
           nodeOpacity: 1,
         };
-      }
-      if (status === "dead") {
-        return {
-          ...person,
-          cardStroke: "#b91c1c",
-          cardFill: "rgba(254, 202, 202, 0.52)",
-          nodeOpacity: 1,
-        };
-      }
-      if (status === "unborn") {
-        return {
-          ...person,
+      } else if (highlightRule !== "off") {
+        decorated = {
+          ...decorated,
           cardStroke: "#94a3b8",
-          cardFill: "rgba(226, 232, 240, 0.72)",
-          nodeOpacity: 0.5,
+          cardFill: "rgba(226, 232, 240, 0.35)",
+          nodeOpacity: 1,
         };
       }
-      return person;
+
+      return decorated;
     });
-  }, [projectionYear, visiblePeople, yearMode]);
+  }, [projectionYear, visiblePeople, yearMode, highlightRule]);
 
   useEffect(() => {
     visibleRef.current = projectedPeople;
@@ -627,6 +659,10 @@ const TreeView = ({
       }
       if (!moreOptionsRef.current?.contains(event.target)) {
         setMoreOptionsOpen(false);
+        setHighlightOpen(false);
+      }
+      if (!highlightSelectRef.current?.contains(event.target)) {
+        setHighlightOpen(false);
       }
       if (!relationPersonARef.current?.contains(event.target)) {
         setRelationPersonAOpen(false);
@@ -642,6 +678,7 @@ const TreeView = ({
         setFamilyOpen(false);
         setCardExtraOpen(false);
         setMoreOptionsOpen(false);
+        setHighlightOpen(false);
         setRelationPersonAOpen(false);
         setRelationPersonBOpen(false);
       }
@@ -907,11 +944,11 @@ const TreeView = ({
         $(
           go.Panel,
           "Auto",
-          { margin: 8, alignment: go.Spot.Center },
+          { margin: 0, alignment: go.Spot.Center },
           $(
             go.Panel,
             "Vertical",
-            { alignment: go.Spot.Center },
+            { alignment: go.Spot.Center, defaultAlignment: go.Spot.Center },
             $(
               go.Panel,
               "Table",
@@ -966,29 +1003,32 @@ const TreeView = ({
             ),
             $(
               go.Panel,
-              "Horizontal",
+              "Table",
               {
-                margin: new go.Margin(6, 0, 0, 0),
+                margin: 0,
                 visible: false,
+                defaultAlignment: go.Spot.Center,
               },
               new go.Binding("visible", "cardMode", (mode) => mode === "compact"),
+              $(go.RowColumnDefinition, { column: 0, width: TREE_NODE_WIDTH - 22 }),
+              $(go.RowColumnDefinition, { row: 0, height: TREE_NODE_HEIGHT - 20 }),
               $(
                 go.TextBlock,
                 {
-                  font: "500 13px 'Space Grotesk', sans-serif",
+                  row: 0,
+                  column: 0,
+                  font: "700 20px 'Space Grotesk', sans-serif",
                   stroke: "#0F172A",
-                  width: TREE_NODE_WIDTH - 22,
-                  maxLines: 1,
+                  maxLines: 2,
+                  wrap: go.TextBlock.WrapFit,
                   overflow: go.TextBlock.OverflowEllipsis,
-                  textAlign: "left",
+                  alignment: go.Spot.Center,
+                  textAlign: "center",
+                  isMultiline: true,
+                  margin: new go.Margin(4, 8, 4, 8),
+                  width: TREE_NODE_WIDTH - 38,
                 },
-                new go.Binding("text", "", (data) => {
-                  const compactName = formatCompactName(data.name, 20);
-                  const extra = getCardExtraText(data, cardExtraField);
-                  return extra
-                    ? `${compactName} (${getLifeLabel(data)}) - ${extra}`
-                    : `${compactName} (${getLifeLabel(data)})`;
-                })
+                new go.Binding("text", "name", (name) => getCleanName(name))
               )
             )
           )
@@ -1866,6 +1906,7 @@ const TreeView = ({
               aria-expanded={moreOptionsOpen}
               onClick={() => {
                 setMoreOptionsOpen((prev) => !prev);
+                setHighlightOpen(false);
                 setFocusOpen(false);
                 setTagOpen(false);
                 setCardExtraOpen(false);
@@ -1918,6 +1959,47 @@ const TreeView = ({
                   >
                     Samo živi
                   </button>
+                </div>
+                <label className="tree-more-options-label">
+                  Istakni osobe
+                </label>
+                <div className="filter-dropdown-wrap" ref={highlightSelectRef}>
+                  <button
+                    type="button"
+                    className="filter-dropdown-trigger tree-toolbar-dropdown-trigger"
+                    aria-label="Isticanje po kriteriju"
+                    aria-haspopup="listbox"
+                    aria-expanded={highlightOpen}
+                    onClick={() => setHighlightOpen((prev) => !prev)}
+                  >
+                    <span>{selectedHighlightLabel}</span>
+                    <ChevronDown className={`card-extra-chevron ${highlightOpen ? "is-open" : ""}`} />
+                  </button>
+                  {highlightOpen && (
+                    <div
+                      className="filter-dropdown-menu tree-toolbar-dropdown-menu"
+                      role="listbox"
+                      aria-label="Isticanje po kriteriju opcije"
+                    >
+                      {highlightOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="option"
+                          aria-selected={highlightRule === option.value}
+                          className={`filter-dropdown-option ${
+                            highlightRule === option.value ? "is-selected" : ""
+                          }`}
+                          onClick={() => {
+                            setHighlightRule(option.value);
+                            setHighlightOpen(false);
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {!Number.isFinite(projectionYear) && yearMode !== "off" && (
                   <p className="tree-more-options-hint">Unesi validnu godinu da filter radi.</p>
@@ -1975,11 +2057,6 @@ const TreeView = ({
                   <span className={`pill ${profilePerson.gender === "F" ? "pink" : "blue"}`}> 
                     {profilePerson.gender === "F" ? "Žensko" : "Muško"}
                   </span>
-                  {profilePerson.isPinned ? (
-                    <span className="pill tree-pill-pin">Pinovan clan</span>
-                  ) : (
-                    <span className="pill tree-pill-muted">Nije pinovan</span>
-                  )}
                   {profilePerson.healthBadge === "hereditary" && (
                     <span className="pill tree-pill-risk">Nasljedni rizik</span>
                   )}
@@ -1997,6 +2074,8 @@ const TreeView = ({
                     <p><strong>Broj djece:</strong> {profileChildrenCount}</p>
                     <p><strong>Zanimanje:</strong> {String(profilePerson.occupation || "").trim() || "-"}</p>
                     <p><strong>Mjesto rođenja:</strong> {String(profilePerson.birthPlace || "").trim() || "-"}</p>
+                    <p><strong>Osnovna skola:</strong> {String(profilePerson.primarySchool || "").trim() || "-"}</p>
+                    <p><strong>Srednja skola:</strong> {String(profilePerson.secondarySchool || "").trim() || "-"}</p>
                     <p><strong>Mjesto ukopa:</strong> {String(profilePerson.burialPlace || "").trim() || "-"}</p>
                   </div>
 
@@ -2091,6 +2170,7 @@ const TreeView = ({
 };
 
 export default TreeView;
+
 
 
 

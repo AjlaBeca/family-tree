@@ -20,8 +20,6 @@ const getSurname = (name = "") => {
 const SearchView = ({
   searchTerm,
   onSearchChange,
-  pinnedOnly,
-  onPinnedOnlyChange,
   people,
   tags,
   tagLinks,
@@ -93,6 +91,8 @@ const SearchView = ({
       const name = String(person.name || "").toLowerCase();
       const bio = String(person.bio || "").toLowerCase();
       const occupation = String(person.occupation || "").toLowerCase();
+      const primarySchool = String(person.primarySchool || "").toLowerCase();
+      const secondarySchool = String(person.secondarySchool || "").toLowerCase();
       const studies = String(person.studies || "").toLowerCase();
       const faculty = String(person.faculty || "").toLowerCase();
       const birthPlace = String(person.birthPlace || "").toLowerCase();
@@ -103,6 +103,8 @@ const SearchView = ({
         !name.includes(query) &&
         !bio.includes(query) &&
         !occupation.includes(query) &&
+        !primarySchool.includes(query) &&
+        !secondarySchool.includes(query) &&
         !studies.includes(query) &&
         !faculty.includes(query) &&
         !birthPlace.includes(query) &&
@@ -171,7 +173,6 @@ const SearchView = ({
     setCurrentPage(1);
   }, [
     searchTerm,
-    pinnedOnly,
     gender,
     lifeStatus,
     hasPhoto,
@@ -196,7 +197,6 @@ const SearchView = ({
 
   const resetFilters = () => {
     onSearchChange("");
-    onPinnedOnlyChange(false);
     setGender("all");
     setLifeStatus("all");
     setHasPhoto("all");
@@ -349,14 +349,6 @@ const SearchView = ({
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
         />
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={Boolean(pinnedOnly)}
-            onChange={(e) => onPinnedOnlyChange(e.target.checked)}
-          />
-          <span>Pinovani</span>
-        </label>
       </div>
 
       <div className="search-filters-grid">
@@ -545,7 +537,6 @@ const SearchView = ({
               <span className={`pill ${person.gender === "M" ? "blue" : "pink"}`}>
                 {person.gender === "M" ? "Musko" : "Zensko"}
               </span>
-              {person.isPinned ? <span className="pill blue">Pin</span> : null}
             </div>
           </button>
         ))}

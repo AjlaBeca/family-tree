@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Save, Trash2, Plus, Pencil, Upload, ChevronDown } from "lucide-react";
+import { Save, Trash2, Plus, Upload, ChevronDown, Camera } from "lucide-react";
 
 const PersonModal = ({
   isOpen,
@@ -16,6 +16,7 @@ const PersonModal = ({
   onChange,
 }) => {
   const [tagSelections, setTagSelections] = useState([]);
+  const [quickTagId, setQuickTagId] = useState("0");
   const [tagDraft, setTagDraft] = useState("");
   const [tagDraftError, setTagDraftError] = useState("");
   const [healthDraft, setHealthDraft] = useState({
@@ -42,6 +43,7 @@ const PersonModal = ({
 
   useEffect(() => {
     setTagSelections(selectedTagIds || []);
+    setQuickTagId("0");
   }, [selectedTagIds]);
 
   useEffect(() => {
@@ -259,12 +261,12 @@ const PersonModal = ({
     const spouse = Number(person.spouse || 0);
 
     if (!(person.name || "").trim()) return "Ime je obavezno.";
-    if (personId && parent === personId) return "Otac ne može biti ista osoba.";
-    if (personId && parent2 === personId) return "Majka ne može biti ista osoba.";
+    if (personId && parent === personId) return "Otac ne moÅ¾e biti ista osoba.";
+    if (personId && parent2 === personId) return "Majka ne moÅ¾e biti ista osoba.";
     if (parent && parent2 && parent === parent2) {
       return "Otac i majka moraju biti različite osobe.";
     }
-    if (personId && spouse === personId) return "Supružnik ne može biti ista osoba.";
+    if (personId && spouse === personId) return "SupruÅ¾nik ne moÅ¾e biti ista osoba.";
     if (isDescendantParentChoice(parent)) {
       return "Neispravna veza: Otac je potomak ove osobe (ciklus).";
     }
@@ -397,7 +399,7 @@ const PersonModal = ({
                   title={safePersonPhoto ? "Uredi fotografiju" : "Dodaj fotografiju"}
                   aria-label={safePersonPhoto ? "Uredi fotografiju" : "Dodaj fotografiju"}
                 >
-                  <Pencil className="w-4 h-4" />
+                  <Camera className="w-5 h-5" />
                 </button>
                 <input
                   ref={heroPhotoInputRef}
@@ -446,7 +448,7 @@ const PersonModal = ({
                   />
                 </label>
                 <label>
-                  Godina smrti (opciono)
+                  Godina smrti
                   <input
                     type="text"
                     value={person.deathYear}
@@ -552,7 +554,7 @@ const PersonModal = ({
 
           <div className="modal-row person-core-row legacy-top-fields">
             <label>
-              Godina smrti (opciono)
+              Godina smrti
               <input
                 type="text"
                 value={person.deathYear}
@@ -563,7 +565,7 @@ const PersonModal = ({
 
           <div className="modal-row">
             <label>
-              Zanimanje (opciono)
+              Zanimanje
               <input
                 type="text"
                 value={person.occupation || ""}
@@ -572,7 +574,7 @@ const PersonModal = ({
             </label>
 
             <label>
-              Mjesto rođenja (opciono)
+              Mjesto rođenja
               <input
                 type="text"
                 value={person.birthPlace || ""}
@@ -583,7 +585,27 @@ const PersonModal = ({
 
           <div className="modal-row">
             <label>
-              Odsjek / stepen (opciono)
+              Osnovna skola
+              <input
+                type="text"
+                value={person.primarySchool || ""}
+                onChange={(e) => update({ primarySchool: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Srednja skola
+              <input
+                type="text"
+                value={person.secondarySchool || ""}
+                onChange={(e) => update({ secondarySchool: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="modal-row">
+            <label>
+              Odsjek / stepen
               <input
                 type="text"
                 value={person.studies || ""}
@@ -593,7 +615,7 @@ const PersonModal = ({
             </label>
 
             <label>
-              Fakultet (opciono)
+              Fakultet
               <input
                 type="text"
                 value={person.faculty || ""}
@@ -605,7 +627,7 @@ const PersonModal = ({
 
           <div className="modal-row person-core-row">
             <label>
-              Mjesto ukopa (opciono)
+              Mjesto ukopa
               <input
                 type="text"
                 value={person.burialPlace || ""}
@@ -645,72 +667,145 @@ const PersonModal = ({
             </label>
           </div>
 
-          <div className="modal-row person-core-row">
-            <label className="person-spouse-field">
-              Supružnik
-              {renderPersonDropdown({
-                keyName: "spouse",
-                value: String(person.spouse || 0),
-                options: [
-                  { value: "0", label: "Nema" },
-                  ...people
-                    .filter((p) => p.id !== person.id)
-                    .map((p) => ({ value: String(p.id), label: p.name })),
-                ],
-                onSelect: (nextSpouse) => {
-                  const spouseId = parseInt(nextSpouse, 10);
-                  update({ spouse: spouseId });
-                },
-                ariaLabel: "Bracni partner",
-              })}
-              <div className="inline-check legacy-divorced-toggle">
-                <input
-                  type="checkbox"
-                  checked={Boolean(person.divorced)}
-                  disabled={!person.spouse}
-                  onChange={(e) => update({ divorced: e.target.checked ? 1 : 0 })}
-                />
-                <span>Razvedeni</span>
-              </div>
-            </label>
 
-            <label className="person-bio-field">
-              Biografija (opciono)
-              <textarea
-                value={person.bio}
-                onChange={(e) => update({ bio: e.target.value })}
-                rows={2}
-              />
-            </label>
+          <div className="modal-row person-core-row">
+            <div className="person-partner-bio-row">
+              <div className="person-partner-tags-col">
+                <label className="person-spouse-field">
+                  Bracni partner
+                  {renderPersonDropdown({
+                    keyName: "spouse",
+                    value: String(person.spouse || 0),
+                    options: [
+                      { value: "0", label: "Nema" },
+                      ...people
+                        .filter((p) => p.id !== person.id)
+                        .map((p) => ({ value: String(p.id), label: p.name })),
+                    ],
+                    onSelect: (nextSpouse) => {
+                      const spouseId = parseInt(nextSpouse, 10);
+                      update({ spouse: spouseId });
+                    },
+                    ariaLabel: "Bracni partner",
+                  })}
+                  <div className="inline-check legacy-divorced-toggle">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(person.divorced)}
+                      disabled={!person.spouse}
+                      onChange={(e) => update({ divorced: e.target.checked ? 1 : 0 })}
+                    />
+                    <span>Razvedeni</span>
+                  </div>
+                </label>
+
+                <label className="person-tag-select-field">
+                  Oznaka
+                  {renderPersonDropdown({
+                    keyName: "quickTag",
+                    value: quickTagId,
+                    options: [
+                      { value: "0", label: "Odaberi oznaku" },
+                      ...(tags || []).map((tag) => ({ value: String(tag.id), label: String(tag.name || "") })),
+                    ],
+                    onSelect: (nextTagId) => setQuickTagId(String(nextTagId || "0")),
+                    ariaLabel: "Oznaka",
+                  })}
+                </label>
+                <button
+                  type="button"
+                  className="btn-ghost small person-set-tag-btn"
+                  onClick={() => {
+                    const tagId = Number(quickTagId || 0);
+                    if (!tagId) return;
+                    setTagSelections((prev) => (prev.includes(tagId) ? prev : [...prev, tagId]));
+                    setQuickTagId("0");
+                  }}
+                >
+                  Set oznaka
+                </button>
+
+                <div className="tag-input person-inline-tag-input">
+                  <input
+                    type="text"
+                    placeholder="Nova oznaka"
+                    value={tagDraft}
+                    onChange={(e) => {
+                      setTagDraft(e.target.value);
+                      if (tagDraftError) setTagDraftError("");
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={async () => {
+                      const name = tagDraft.trim();
+                      if (!name) {
+                        setTagDraftError("Unesi naziv oznake prije dodavanja.");
+                        return;
+                      }
+                      if (!onCreateTag) {
+                        setTagDraftError("Dodavanje oznaka trenutno nije dostupno.");
+                        return;
+                      }
+                      const tag = await onCreateTag(name);
+                      if (tag?.id) {
+                        setTagSelections((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
+                      }
+                      setTagDraft("");
+                      setTagDraftError("");
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Dodaj
+                  </button>
+                </div>
+                {tagDraftError && <p className="tag-input-error">{tagDraftError}</p>}
+
+                <div className="tag-list person-inline-tag-list">
+                  {tagSelections.length === 0 && <p className="muted-text">Nema oznaka.</p>}
+                  {tagSelections.map((tagId) => {
+                    const tag = (tags || []).find((item) => Number(item.id) === Number(tagId));
+                    const tagName = String(tag?.name || "").trim() || `#${tagId}`;
+                    return (
+                      <span
+                        key={`selected-tag-${tagId}`}
+                        className="tag-pill small active person-selected-tag"
+                      >
+                        <span>{tagName}</span>
+                        <button
+                          type="button"
+                          className="person-selected-tag-remove"
+                          onClick={() =>
+                            setTagSelections((prev) => prev.filter((id) => Number(id) !== Number(tagId)))
+                          }
+                          title="Ukloni oznaku"
+                          aria-label={`Ukloni oznaku ${tagName}`}
+                        >
+                          x
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="person-bio-field">
+                <span className="person-bio-label">Biografija</span>
+                <textarea
+                  value={person.bio}
+                  onChange={(e) => update({ bio: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="modal-section">
             <div className="section-header">
-              <h4>Pin i zdravlje</h4>
+              <h4>Zdravlje</h4>
             </div>
 
-            <div className="modal-row">
-              <label>
-                <div className="inline-check">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(person.isPinned)}
-                    onChange={(e) => update({ isPinned: e.target.checked ? 1 : 0 })}
-                  />
-                  <span>Označi kao ključnog člana (pin)</span>
-                </div>
-              </label>
-
-              <label>
-                Boja pina
-                <input
-                  type="color"
-                  value={person.pinColor || "#f59e0b"}
-                  onChange={(e) => update({ pinColor: e.target.value })}
-                  disabled={!person.isPinned}
-                />
-              </label>
-            </div>
 
             <div className="modal-row">
               <label>
@@ -757,74 +852,10 @@ const PersonModal = ({
             </label>
           </div>
 
-          <div className="modal-section">
-            <div className="section-header">
-              <h4>Oznake</h4>
-            </div>
-            <div className="tag-input">
-              <input
-                type="text"
-                placeholder="Nova oznaka"
-                value={tagDraft}
-                onChange={(e) => {
-                  setTagDraft(e.target.value);
-                  if (tagDraftError) setTagDraftError("");
-                }}
-              />
-              <button
-                type="button"
-                className="btn-ghost small"
-                onClick={async () => {
-                  const name = tagDraft.trim();
-                  if (!name) {
-                    setTagDraftError("Unesi naziv oznake prije dodavanja.");
-                    return;
-                  }
-                  if (!onCreateTag) {
-                    setTagDraftError("Dodavanje oznaka trenutno nije dostupno.");
-                    return;
-                  }
-                  const tag = await onCreateTag(name);
-                  if (tag?.id) {
-                    setTagSelections((prev) =>
-                      prev.includes(tag.id) ? prev : [...prev, tag.id]
-                    );
-                  }
-                  setTagDraft("");
-                  setTagDraftError("");
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                Dodaj
-              </button>
-            </div>
-            {tagDraftError && <p className="tag-input-error">{tagDraftError}</p>}
-            <div className="tag-list">
-              {(tags || []).length === 0 && (
-                <p className="muted-text">Nema oznaka.</p>
-              )}
-              {(tags || []).map((tag) => (
-                <label key={tag.id} className="tag-item">
-                  <input
-                    type="checkbox"
-                    checked={tagSelections.includes(tag.id)}
-                    onChange={() =>
-                      setTagSelections((prev) =>
-                        prev.includes(tag.id)
-                          ? prev.filter((id) => id !== tag.id)
-                          : [...prev, tag.id]
-                      )
-                    }
-                  />
-                  <span>{tag.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
 
           <div className="modal-row modal-row-single legacy-photo-block">
             <label>
-              Dodaj fotografiju (opciono)
+              Dodaj fotografiju
               <div className="photo-picker-row">
                 <label className="file-picker">
                   <span className="file-picker-btn">Odaberi fotografiju</span>
@@ -876,7 +907,7 @@ const PersonModal = ({
                   title="Uredi fotografiju"
                   aria-label="Uredi fotografiju"
                 >
-                  <Pencil className="w-4 h-4" />
+                  <Camera className="w-5 h-5" />
                 </button>
               </div>
 
@@ -1004,6 +1035,10 @@ const PersonModal = ({
 };
 
 export default PersonModal;
+
+
+
+
 
 
 

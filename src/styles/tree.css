@@ -379,6 +379,7 @@
   font-size: 0.82rem;
   font-weight: 500;
   line-height: 1;
+  margin-top: 1px;
 }
 
 .tree-toolbar-dropdown-menu {
@@ -492,6 +493,7 @@
 }
 
 .card-extra-menu {
+  top: calc(100% + 5px);
   max-height: 220px;
   z-index: 280;
 }
@@ -691,16 +693,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.tree-pill-pin {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
-}
-
-.tree-pill-muted {
-  background: #e2e8f0;
-  color: #475569;
 }
 
 .tree-pill-risk {

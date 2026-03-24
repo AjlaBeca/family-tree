@@ -219,6 +219,20 @@ const PersonDetailsView = ({
   return (
     <div className="panel page person-details-page">
       <div className="page-header">
+        <div className="person-hero-top person-page-title-row">
+          <h3>{clean(person.name, "Bez imena")}</h3>
+          <span className="muted-text person-hero-year">{lifeLabel(person)}</span>
+          <div className="person-hero-pills">
+            <span className={`pill ${person.gender === "F" ? "pink" : "blue"}`}>
+              {person.gender === "F" ? "Zensko" : "Musko"}
+            </span>
+            {tagNames.length > 0 && (
+              <span className="pill blue">
+                {tagNames.length === 1 ? tagNames[0] : `${tagNames.length} oznake`}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="gallery-top-actions">
           <button type="button" className="btn-ghost" onClick={onBackToTree}>
             <ArrowLeft className="w-4 h-4" />
@@ -231,7 +245,7 @@ const PersonDetailsView = ({
         </div>
       </div>
 
-      <div className="card person-details-hero">
+      <div className="person-details-hero">
         {profilePhoto && !photoFailed ? (
           <img
             src={profilePhoto}
@@ -250,20 +264,6 @@ const PersonDetailsView = ({
           </div>
         )}
         <div className="person-details-hero-meta">
-          <div className="person-hero-top">
-            <h3>{clean(person.name, "Bez imena")}</h3>
-            <span className="muted-text person-hero-year">{lifeLabel(person)}</span>
-            <div className="person-hero-pills">
-              <span className={`pill ${person.gender === "F" ? "pink" : "blue"}`}>
-                {person.gender === "F" ? "Zensko" : "Musko"}
-              </span>
-              {tagNames.length > 0 && (
-                <span className="pill blue">
-                  {tagNames.length === 1 ? tagNames[0] : `${tagNames.length} oznake`}
-                </span>
-              )}
-            </div>
-          </div>
           <div className="person-hero-facts">
             <p>
               <Briefcase className="w-4 h-4" />
@@ -281,9 +281,19 @@ const PersonDetailsView = ({
               <span>{clean(person.studies, "Nije uneseno")}</span>
             </p>
             <p>
+              <Briefcase className="w-4 h-4" />
+              <span className="person-hero-fact-label">Osnovna skola</span>
+              <span>{clean(person.primarySchool, "Nije uneseno")}</span>
+            </p>
+            <p>
               <MapPin className="w-4 h-4" />
               <span className="person-hero-fact-label">Fakultet</span>
               <span>{clean(person.faculty, "Nije uneseno")}</span>
+            </p>
+            <p>
+              <MapPin className="w-4 h-4" />
+              <span className="person-hero-fact-label">Srednja skola</span>
+              <span>{clean(person.secondarySchool, "Nije uneseno")}</span>
             </p>
           </div>
           <p className="muted-text person-hero-bio">{clean(person.bio, "Bez biografije.")}</p>
@@ -345,6 +355,14 @@ const PersonDetailsView = ({
               <div className="person-kv-row">
                 <span className="person-kv-label">Odsjek / stepen</span>
                 <span className="person-kv-value">{clean(person.studies)}</span>
+              </div>
+              <div className="person-kv-row">
+                <span className="person-kv-label">Osnovna skola</span>
+                <span className="person-kv-value">{clean(person.primarySchool)}</span>
+              </div>
+              <div className="person-kv-row">
+                <span className="person-kv-label">Srednja skola</span>
+                <span className="person-kv-value">{clean(person.secondarySchool)}</span>
               </div>
               <div className="person-kv-row">
                 <span className="person-kv-label">Fakultet</span>
